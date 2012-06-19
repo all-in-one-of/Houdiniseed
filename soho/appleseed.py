@@ -22,15 +22,15 @@
 import os
 import sys
 
+import hou
 import soho
 import sohog
 
 from xml.etree.ElementTree import Element, ElementTree
 
-
 ##
 #
-class Attr(object):
+class Attribute(object):
 
 	def __init__(self, name, required, default, value):
 		self.name     = name
@@ -41,12 +41,21 @@ class Attr(object):
 
 ##
 #
+class Parameter(object):
+
+	def __init__(self, name, required, default, value):
+		self.name     = name
+		self.required = required
+		self.defualt  = default
+		self.value    = value
+
+##
+#
 class Node(object):
 
 	def __init__(self):
-		self.name     = None
-		self.attrs    = {}
-		self.children = {}
+		self.attributes = {}
+		self.parameters = {}
 
 	def Resolve(self, sohoObject, moments):
 		pass
@@ -71,7 +80,7 @@ class Transform(Node):
 
 		self.matrix = Matrix()
 
-		self.attrs[Transform.TIME] = Attr(Transform.TIME, True, 0.0, 0.0)
+		self.attributes[Transform.TIME] = Attribute(Transform.TIME, True, 0.0, 0.0)
 
 
 ##
@@ -85,9 +94,9 @@ class LookAt(Node):
 	def __init__(self):
 		super(LookAt, self).__init__()
 
-		self.attrs[LookAt.ORIGIN] = Attr(LookAt.ORIGIN, True, (0, 0,   0), (0, 0,   0))
-		self.attrs[LookAt.TARGET] = Attr(LookAt.TARGET, True, (0, 0, - 1), (0, 0, - 1))
-		self.attrs[LookAt.UP]     = Attr(LookAt.UP,     True, (0, 1,   0), (0, 1,   0))
+		self.attributes[LookAt.ORIGIN] = Attribute(LookAt.ORIGIN, True, (0, 0,   0), (0, 0,   0))
+		self.attributes[LookAt.TARGET] = Attribute(LookAt.TARGET, True, (0, 0, - 1), (0, 0, - 1))
+		self.attributes[LookAt.UP]     = Attribute(LookAt.UP,     True, (0, 1,   0), (0, 1,   0))
 
 
 ##
@@ -96,48 +105,137 @@ class Camera(Node):
 
 	##
 	# <camera> used attributes.
+	NAME            = 'name'
 	MODEL           = 'model'
+
+	##
+	# <camera> used parameters.
 	FILM_DIMENSIONS = 'film_dimensions'
 	FOCAL_LENGTH    = 'focal_length'
 
 	##
 	# Houdini used parameters.
-	FOCAL = 'focal'
-	POS   = 'pos'
+	FOCAL           = 'focal'
 	
 	SUPPORTED_SOHO_PARAMS = {
 		FOCAL : soho.SohoParm(FOCAL, 'float', [35.0],          False),
-		POS   : soho.SohoParm(POS,   'float', [0.0, 0.0, 0.0], False),
 	}
 
 	def __init__(self):
 		super(Camera, self).__init__()
 
-		self.attrs[Camera.MODEL]           = Attr(Camera.MODEL,           True, 'pinhole_camera', 'pinhole_camera')
-		self.attrs[Camera.FILM_DIMENSIONS] = Attr(Camera.FILM_DIMENSIONS, True, (0.025, 0.025),   (0.025, 0.025))
-		self.attrs[Camera.FOCAL_LENGTH]    = Attr(Camera.FOCAL_LENGTH,    True,  35.0,             35.0)
+		self.attributes[Camera.MODEL]           = Attribute(Camera.MODEL,           True, 'pinhole_camera', 'pinhole_camera')
+
+		self.parameters[Camera.FILM_DIMENSIONS] = Parameter(Camera.FILM_DIMENSIONS, True, (0.025, 0.025),   (0.025, 0.025))
+		self.parameters[Camera.FOCAL_LENGTH]    = Parameter(Camera.FOCAL_LENGTH,    True,  35.0,             35.0)
 
 		self.transform = Transform()
 
 	def Resolve(self, sohoObject, moments):
-		self.name = sohoObject.getName()
+		self.attributes[Camera.NAME] = sohoObject.getName()
+
 		sohoParmsValues = sohoObject.evaluate(Camera.SUPPORTED_SOHO_PARAMS, moments[0])
-		self.attrs[Camera.FOCAL_LENGTH].value = sohoParmsValues[Camera.FOCAL].Value[0]
-		print sohoParmsValues[Camera.POS].Value[0]
+		self.attributes[Camera.FOCAL_LENGTH] = sohoParmsValues[Camera.FOCAL].Value[0]
+		print sohoParmsValues[Camera.FOCAL].Value[0]
 
 		sohoObject.evalFloat('space:world', moments[0], self.transform.matrix.transformation)
 		print self.transform.matrix.transformation
 
 
 ##
+# Represents the <object> in the XML scene description.
 #
-class Object(Node):
+class Geometry(Node):
+
+	##
+	# <object> used attributes.
+	NAME  = 'name'
+	MODEL = 'model'
 
 	def __init__(self):
-		pass
+		super(Geometry, self).__init__()
+
+	def SaveToWavefrontObj(self, sopPath, sohoGeometry):
+		splittedSopPath = sopPath.split('/')
+
+		## Check if the asset folder exists.
+		#
+		diskFilePath = soho.getDefaultedString('soho_diskfile', [''])[0]
+		diskFileDir = os.path.dirname(diskFilePath)
+		diskFileName = os.path.basename(diskFilePath)
+		companionDir = '%s%s-assets' % (diskFileDir, diskFileName.split('.')[0])
+		print companionDir
+		if not os.path.exists(companionDir):
+			if not os.path.isdir(companionDir):
+				os.remove(companionDir)
+			os.mkdir(companionDir)
+
+		formattedSopPath = sopPath.replace('/', '__')
+		objFileName = formattedSopPath + '.obj'
+		objFilePath = os.path.join(companionDir, objFileName)
+		print objFilePath
+
+		## Export out the polygons.
+		#
+		file = open(objFilePath, 'w')
+
+		file.write('# %s\n' % sopPath)
+		file.write('g %s\n' % formattedSopPath)
+
+		geoPointCount = sohoGeometry.globalValue('geo:pointcount')[0]
+		geoPrimCount = sohoGeometry.globalValue('geo:primcount')[0]
+
+		file.write('# %d vertices, %d primitives.\n' % (geoPointCount, geoPrimCount))
+
+		# v		
+		geoPointP = sohoGeometry.attribute('geo:point', 'P')
+		for i in xrange(geoPointCount):
+			v = sohoGeometry.value(geoPointP, i)
+			file.write('v %.10f %.10f %.10f\n' % (v[0], v[1], v[2]))
+
+		# vt
+		hasUV = False
+		geoPrimVertexCount = sohoGeometry.attribute('geo:prim', 'geo:vertexcount')
+		geoVertexAttribs = sohoGeometry.globalValue('geo:vertexattribs')
+		for geoVertexAttrib in geoVertexAttribs:
+			if geoVertexAttrib == 'uv':
+				geoVertexUV = sohoGeometry.attribute('geo:vertex', 'uv')
+				for i in xrange(geoPrimCount):
+					for j in xrange(sohoGeometry.value(geoPrimVertexCount, i)[0]):
+						v = sohoGeometry.vertex(geoVertexUV, i, j)
+						file.write('vt %.10f %.10f\n' % (v[0], v[1]))
+				hasUV = True
+
+		# f
+		fakeUVIndex = 1;
+		geoVertexPointRef = sohoGeometry.attribute('geo:vertex', 'geo:pointref')
+
+		if hasUV:
+			for i in xrange(geoPrimCount):
+				file.write('f')
+				for j in xrange(sohoGeometry.value(geoPrimVertexCount, i)[0]):
+					v = sohoGeometry.vertex(geoVertexPointRef, i, j)
+					file.write(' %d/%d' % (v[0] + 1, fakeUVIndex))
+					fakeUVIndex += 1
+				file.write('\n')
+		else:
+			for i in xrange(geoPrimCount):
+				file.write('f')
+				for j in xrange(sohoGeometry.value(geoPrimVertexCount, i)[0]):
+					v = sohoGeometry.vertex(geoVertexPointRef, i, j)
+					file.write(' %d' % (v[0] + 1))
+				file.write('\n')
+
+		file.close()
+
+		return objFilePath
 
 	def Resolve(self, sohoObject, moments):
-		pass
+		sopPath = sohoObject.getDefaultedString('object:soppath', sohoObject, [''])[0]
+		self.attributes[Geometry.NAME] = sopPath
+
+		sohoGeometry = sohog.SohoGeometry(sopPath, moments[0])
+		objFilePath = self.SaveToWavefrontObj(sopPath, sohoGeometry)
 
 
 ##
@@ -157,6 +255,10 @@ if __name__ == '__builtin__':
 
 	soho.lockObjects(moments[0])
 
-	for sohoObject in soho.objectList('objlist:camera'):
+	for sohoCamera in soho.objectList('objlist:camera'):
 		camera = Camera()
-		camera.Resolve(sohoObject, moments)
+		camera.Resolve(sohoCamera, moments)
+
+	for sohoGeometry in soho.objectList('objlist:instance'):
+		geometry = Geometry()
+		geometry.Resolve(sohoGeometry, moments)
