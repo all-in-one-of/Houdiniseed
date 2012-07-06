@@ -1,4 +1,4 @@
-# Copyright (c) 2012 Bo Zhou
+# Copyright (c) 2012 Bo Zhou<bo.schwarzstein@gmail.com>
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -33,6 +33,9 @@ from xml.etree.ElementTree import Element, ElementTree, SubElement, tostring
 #
 class Attr(object):
 
+	NAME  = 'name'
+	VALUE = 'value'
+
 	def __init__(self, name, required, default, value):
 		self.name     = name
 		self.required = required
@@ -55,7 +58,9 @@ class Node(object):
 class Project(Node):
 
 	def __init__(self):
-		self.scene = Scene()
+		self.scene          = Scene()
+		self.output         = Output()
+		self.configurations = Configurations()
 
 
 ##
@@ -276,10 +281,12 @@ class XmlSerializer(object):
 		cameraNode.attrib[Camera.MODEL] = camera.attrs[Camera.MODEL].value
 
 		parameterNode = SubElement(cameraNode, 'parameter')
-		parameterNode.attrib[Camera.FILM_DIMENSIONS] = '%f %f' % (camera.attrs[Camera.FILM_DIMENSIONS].value)
+		parameterNode.attrib[Attr.NAME]  = Camera.FILM_DIMENSIONS
+		parameterNode.attrib[Attr.VALUE] = '%f %f' % (camera.attrs[Camera.FILM_DIMENSIONS].value)
 
 		parameterNode = SubElement(cameraNode, 'parameter')
-		parameterNode.attrib[Camera.FOCAL_LENGTH]    = '%f'    % (camera.attrs[Camera.FOCAL_LENGTH].value / 1000)
+		parameterNode.attrib[Attr.NAME]  = Camera.FOCAL_LENGTH
+		parameterNode.attrib[Attr.VALUE]    = '%f' % (camera.attrs[Camera.FOCAL_LENGTH].value / 1000)
 
 		transformNode = SubElement(cameraNode, 'transform')
 		matrixNode = SubElement(transformNode, 'matrix')
@@ -290,7 +297,7 @@ class XmlSerializer(object):
 
 		## Serialize project:scene:assembly
 		#
-		assemblyNode = SubElement(sceneNode, 'assebmly')
+		assemblyNode = SubElement(sceneNode, 'assembly')
 		assemblyNode.attrib[Assembly.NAME] = 'assembly'
 
 		## Serialize project:scene:assembly:object.
@@ -302,10 +309,95 @@ class XmlSerializer(object):
 			objectNode.attrib[Object.MODEL] = object.attrs[Object.MODEL].value
 
 			parameterNode = SubElement(objectNode, 'parameter')
-			parameterNode.attrib[Object.FILENAME] = object.attrs[Object.FILENAME].value
+			parameterNode.attrib[Attr.NAME]  = Object.FILENAME
+			parameterNode.attrib[Attr.VALUE] = object.attrs[Object.FILENAME].value
+
+		## Serialize project:output
+		#
+		outputNode = SubElement(projectNode, 'output')
+		for (frameName, frame) in project.output.frames.iteritems():
+			frameNode = SubElement(outputNode, 'frame')
+			frameNode.attrib[Frame.NAME] = frame.attrs[Frame.NAME].value
+
+			parameterNode = SubElement(frameNode, 'parameter')
+			parameterNode.attrib[Attr.NAME] = Frame.CAMERA
+			parameterNode.attrib[Attr.VALUE] = frame.attrs[Frame.CAMERA].value
+
+			(resx, resy) = frame.attrs[Frame.RESOLUTION].value
+			parameterNode = SubElement(frameNode, 'parameter')
+			parameterNode.attrib[Attr.NAME]  = Frame.RESOLUTION
+			parameterNode.attrib[Attr.VALUE] = '%d %d' % (resx, resy)
+			
 
 		ElementTree(projectNode).write(sys.stdout, encoding = 'UTF-8')
 
+
+##
+#
+class Output(Node):
+
+	def __init__(self):
+		self.frames = {}
+
+
+##
+#
+class Frame(Node):
+
+	NAME      = 'name'
+	CAMERA    = 'camera'
+	RESOLUTION = 'resolution'
+
+	#
+	COLOR_SPACE = 'color_space'
+	TILE_SIZE = 'tile_size'
+	
+
+	SUPPORTED_SOHO_PARAMS = {
+		CAMERA      : soho.SohoParm(CAMERA,      'string', ['/obj/cam1'],  False),
+		COLOR_SPACE : soho.SohoParm(COLOR_SPACE, 'string', ['linear_rgb'], True),
+		TILE_SIZE   : soho.SohoParm(TILE_SIZE,   'int',    [32],           True),
+	}
+
+	def __init__(self):
+		super(Frame, self).__init__()
+
+		self.attrs[Frame.NAME]       = Attr(Frame.NAME,      True,  None, '')
+		self.attrs[Frame.CAMERA]     = Attr(Frame.CAMERA,    True,  None, '')
+		self.attrs[Frame.RESOLUTION] = Attr(Frame.TILE_SIZE, True,  None, ())
+		self.attrs[Frame.TILE_SIZE]  = Attr(Frame.TILE_SIZE, False, 32,   32)
+
+	def Resolve(self, sohoObject, moments):
+		(basicName, extensionName) = os.path.splitext(os.path.basename(hou.hipFile.name()))
+		frameNumber = int(moments[0] * 24 + 1)
+		self.attrs[Frame.NAME].value = '%s.%.4d' % (basicName, frameNumber)
+
+		sohoParmsValues = soho.sohoglue.evaluate(Frame.SUPPORTED_SOHO_PARAMS, None, None)
+		self.attrs[Frame.CAMERA].value = sohoParmsValues[Frame.CAMERA].Value[0]
+		cameraHouNode = hou.node(sohoParmsValues[Frame.CAMERA].Value[0])
+		resx = cameraHouNode.evalParm('resx')
+		resy = cameraHouNode.evalParm('resy')
+		self.attrs[Frame.RESOLUTION].value = (resx, resy)
+
+		if sohoParmsValues.has_key(Frame.TILE_SIZE):
+			tile_size = self.attrs[Frame.TILE_SIZE]
+			tile_size.required = True
+			tile_size.value    = sohoParmsValues[Frame.TILE_SIZE].Value[0]
+			
+
+##
+#
+class Configurations(Node):
+
+	def __init__(self):
+		pass
+
+##
+#
+class Configuration(Node):
+
+	def __init__(self):
+		super(Configuration, self).__init__()
 
 ##
 #
@@ -339,6 +431,10 @@ if __name__ == '__builtin__':
 		objectName = object.attrs[Object.NAME]
 		if not project.scene.assembly.objects.has_key(objectName):
 			project.scene.assembly.objects[objectName] = object
+
+	frame = Frame()
+	frame.Resolve(None, moments)
+	project.output.frames[frame.attrs[Frame.NAME].value] = frame
 
 	serializer = XmlSerializer()
 	serializer.Serialize(project)
