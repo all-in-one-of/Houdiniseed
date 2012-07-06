@@ -36,11 +36,9 @@ class Attr(object):
 	NAME  = 'name'
 	VALUE = 'value'
 
-	def __init__(self, name, required, default, value):
-		self.name     = name
-		self.required = required
-		self.defualt  = default
-		self.value    = value
+	def __init__(self, name, value):
+		self.name  = name
+		self.value = value
 
 ##
 #
@@ -98,9 +96,6 @@ class Object(Assembly):
 
 	def __init__(self):
 		super(Object, self).__init__()
-		self.attrs[Object.NAME]     = Attr(Object.NAME,  True, 'object', 'object')
-		self.attrs[Object.MODEL]    = Attr(Object.MODEL, True, 'mesh_object', 'mesh_object')
-		self.attrs[Object.FILENAME] = Attr(Object.MODEL, True, 'NOT-FOUND',   'NOT-FOUND')
 
 	def SaveToWavefrontObj(self, sopPath, sohoGeometry):
 		splittedSopPath = sopPath.split('/')
@@ -118,7 +113,7 @@ class Object(Assembly):
 		objFileName = formattedSopPath + '.obj'
 		objFilePath = os.path.join(companionDir, objFileName)
 
-		self.attrs[Object.FILENAME].value = os.path.join('.', os.path.basename(companionDir), objFileName)
+		self.attrs[Object.FILENAME] = Attr(Object.FILENAME, os.path.join('.', os.path.basename(companionDir), objFileName))
 
 		## Export out the polygons.
 		#
@@ -177,7 +172,9 @@ class Object(Assembly):
 
 	def Resolve(self, sohoObject, moments):
 		sopPath = sohoObject.getDefaultedString('object:soppath', sohoObject, [''])[0]
-		self.attrs[Object.NAME].value = sopPath
+		self.attrs[Object.NAME] = Attr(Object.NAME, sopPath)
+
+		self.attrs[Object.MODEL] = Attr(Object.MODEL, 'mesh_object')
 
 		sohoGeometry = sohog.SohoGeometry(sopPath, moments[0])
 		objFilePath = self.SaveToWavefrontObj(sopPath, sohoGeometry)
@@ -202,7 +199,8 @@ class Transform(Node):
 
 		self.matrix = Matrix()
 
-		self.attrs[Transform.TIME] = Attr(Transform.TIME, True, 0.0, 0.0)
+	def Resolve(self, sohoObject, moments):
+		self.attrs[Transform.TIME] = Attr(Transform.TIME, 0)
 
 
 ##
@@ -216,10 +214,6 @@ class LookAt(Node):
 	def __init__(self):
 		super(LookAt, self).__init__()
 
-		self.attrs[LookAt.ORIGIN] = Attr(LookAt.ORIGIN, True, (0, 0,   0), (0, 0,   0))
-		self.attrs[LookAt.TARGET] = Attr(LookAt.TARGET, True, (0, 0, - 1), (0, 0, - 1))
-		self.attrs[LookAt.UP]     = Attr(LookAt.UP,     True, (0, 1,   0), (0, 1,   0))
-
 
 ##
 #
@@ -229,36 +223,130 @@ class Camera(Node):
 	# <camera> used attributes.
 	NAME            = 'name'
 	MODEL           = 'model'
-
 	FILM_DIMENSIONS = 'film_dimensions'
 	FOCAL_LENGTH    = 'focal_length'
 
 	##
 	# Houdini used parameters.
 	FOCAL           = 'focal'
+	RESX            = 'resx'
+	RESY            = 'resy'
 	
 	SUPPORTED_SOHO_PARAMS = {
 		FOCAL : soho.SohoParm(FOCAL, 'float', [35.0], False),
+		RESX  : soho.SohoParm(RESX,  'int',   [640],  False),
+		RESY  : soho.SohoParm(RESY,  'int',   [480],  False),
 	}
 
 	def __init__(self):
 		super(Camera, self).__init__()
-		
-		self.attrs[Camera.NAME]            = Attr(Camera.NAME,            True, 'default',        'default')
-		self.attrs[Camera.MODEL]           = Attr(Camera.MODEL,           True, 'pinhole_camera', 'pinhole_camera')
-
-		self.attrs[Camera.FILM_DIMENSIONS] = Attr(Camera.FILM_DIMENSIONS, True, (0.025, 0.025),   (0.025, 0.025))
-		self.attrs[Camera.FOCAL_LENGTH]    = Attr(Camera.FOCAL_LENGTH,    True,  35.0,             35.0)
 
 		self.transform = Transform()
 
 	def Resolve(self, sohoObject, moments):
-		self.attrs[Camera.NAME].value = sohoObject.getName()
+		self.attrs[Camera.NAME] = Attr(Camera.NAME, sohoObject.getName())
+
+		self.attrs[Camera.MODEL] = Attr(Camera.MODEL, 'pinhole_camera')
 
 		sohoParmsValues = sohoObject.evaluate(Camera.SUPPORTED_SOHO_PARAMS, moments[0])
-		self.attrs[Camera.FOCAL_LENGTH].value = sohoParmsValues[Camera.FOCAL].Value[0]
+
+		resx = sohoParmsValues[Camera.RESX].Value[0]
+		resy = sohoParmsValues[Camera.RESY].Value[0]
+		self.attrs[Camera.FILM_DIMENSIONS] = Attr(Camera.FILM_DIMENSIONS, (0.025, float(resy) /  float(resx) * 0.025))
+
+		self.attrs[Camera.FOCAL_LENGTH] = Attr(Camera.FOCAL_LENGTH, sohoParmsValues[Camera.FOCAL].Value[0])
 
 		sohoObject.evalFloat('space:world', moments[0], self.transform.matrix.data)
+
+
+##
+#
+class Output(Node):
+
+	def __init__(self):
+		self.frames = {}
+
+
+##
+#
+class Frame(Node):
+
+	NAME      = 'name'
+	CAMERA    = 'camera'
+	RESOLUTION = 'resolution'
+
+	#
+	COLOR_SPACE = 'color_space'
+	TILE_SIZE = 'tile_size'
+
+	SUPPORTED_SOHO_PARAMS = {
+		CAMERA      : soho.SohoParm(CAMERA,      'string', ['/obj/cam1'],  False),
+		COLOR_SPACE : soho.SohoParm(COLOR_SPACE, 'string', ['linear_rgb'], True),
+		TILE_SIZE   : soho.SohoParm(TILE_SIZE,   'int',    [32],           True),
+	}
+
+	def __init__(self):
+		super(Frame, self).__init__()
+
+	def Resolve(self, sohoObject, moments):
+		(basicName, extensionName) = os.path.splitext(os.path.basename(hou.hipFile.name()))
+		frameNumber = int(moments[0] * 24 + 1)
+		self.attrs[Frame.NAME] = Attr(Frame.NAME, '%s.%.4d' % (basicName, frameNumber))
+
+		sohoParmsValues = soho.sohoglue.evaluate(Frame.SUPPORTED_SOHO_PARAMS, None, None)
+		self.attrs[Frame.CAMERA] = Attr(Frame.CAMERA, sohoParmsValues[Frame.CAMERA].Value[0])
+		cameraHouNode = hou.node(sohoParmsValues[Frame.CAMERA].Value[0])
+		resx = cameraHouNode.evalParm('resx')
+		resy = cameraHouNode.evalParm('resy')
+		self.attrs[Frame.RESOLUTION] = Attr(Frame.RESOLUTION, (resx, resy))
+
+		if sohoParmsValues.has_key(Frame.TILE_SIZE):
+			self.attrs[Frame.TILE_SIZE] = Attr(Frame.TILE_SIZE, sohoParmsValues[Frame.TILE_SIZE].Value[0])
+
+
+##
+#
+class Configurations(Node):
+
+	NAME                  = 'name'
+	BASE                  = 'base'
+	BASE_FINAL            = 'base_final'
+	BASE_INTERACTIVE       = 'base_interactive'
+
+	BF_LIGHTING_ENGINE    = 'bf_lighting_engine'
+	BF_MIN_SAMPLES        = 'bf_min_samples'
+	BF_MAX_SAMPLES        = 'bf_max_samples'
+	BF_SAMPLE_FILTER_SIZE = 'bf_sample_filter_size'
+	BF_SAMPLE_FILTER_TYPE = 'bf_sample_filter_type'
+
+	BI_LIGHTING_ENGINE    = 'bi_lighting_engine'
+	BI_MIN_SAMPLES        = 'bi_min_samples'
+	BI_MAX_SAMPLES        = 'bi_max_samples'
+	BI_SAMPLE_FILTER_SIZE = 'bi_sample_filter_size'
+	BI_SAMPLE_FILTER_TYPE = 'bi_sample_filter_type'
+
+	SUPPORTED_SOHO_PARAMS = {
+		BF_LIGHTING_ENGINE      : soho.SohoParm(BF_LIGHTING_ENGINE,    'string', ['pt'],       True),
+		BF_MIN_SAMPLES          : soho.SohoParm(BF_MIN_SAMPLES,        'int',    [1],          True),
+		BF_MAX_SAMPLES          : soho.SohoParm(BF_MAX_SAMPLES,        'int',    [1],          True),
+		BF_SAMPLE_FILTER_SIZE   : soho.SohoParm(BF_SAMPLE_FILTER_SIZE, 'int',    [4],          True),
+		BF_SAMPLE_FILTER_TYPE   : soho.SohoParm(BF_SAMPLE_FILTER_TYPE, 'string', ['mitcheal'], True),
+
+		BI_LIGHTING_ENGINE      : soho.SohoParm(BI_LIGHTING_ENGINE,    'string', ['pt'],  True),
+		BI_MIN_SAMPLES          : soho.SohoParm(BI_MIN_SAMPLES,        'int',    [1],     True),
+		BI_MAX_SAMPLES          : soho.SohoParm(BI_MAX_SAMPLES,        'int',    [1],     True),
+		BI_SAMPLE_FILTER_SIZE   : soho.SohoParm(BI_SAMPLE_FILTER_SIZE, 'int',    [1],     True),
+		BI_SAMPLE_FILTER_TYPE   : soho.SohoParm(BI_SAMPLE_FILTER_TYPE, 'string', ['box'], True),
+	}
+
+	def __init__(self):
+		super(Configurations, self).__init__()
+
+	def Resolve(self, sohoObject, moments):
+		sohoParmsValues = soho.sohoglue.evaluate(Configurations.SUPPORTED_SOHO_PARAMS, None, None)
+		for key, value in sohoParmsValues.iteritems():
+			self.attrs[key] = Attr(key, value.Value[0])
+
 
 ##
 #
@@ -327,77 +415,32 @@ class XmlSerializer(object):
 			parameterNode = SubElement(frameNode, 'parameter')
 			parameterNode.attrib[Attr.NAME]  = Frame.RESOLUTION
 			parameterNode.attrib[Attr.VALUE] = '%d %d' % (resx, resy)
-			
 
+		## Serialize project:configurations
+		#
+		configurationsNode = SubElement(projectNode, 'configurations')
+
+		bfConfigurationsNode = SubElement(configurationsNode, 'configuration')
+		bfConfigurationsNode.attrib[Configurations.NAME] = 'final'
+		bfConfigurationsNode.attrib[Configurations.BASE] = Configurations.BASE_FINAL
+
+		biConfigurationsNode = SubElement(configurationsNode, 'configuration')
+		biConfigurationsNode.attrib[Configurations.NAME] = 'interactive'
+		biConfigurationsNode.attrib[Configurations.BASE] = Configurations.BASE_INTERACTIVE
+
+		for (k, attr) in project.configurations.attrs.iteritems():
+			if k.find('bf_') == 0:
+				parameterNode = SubElement(bfConfigurationsNode, 'parameter')
+				parameterNode.attrib[Attr.NAME]  = k[3:]
+				parameterNode.attrib[Attr.VALUE] = '%d' % attr.value
+			elif k.find('bi_') == 0:
+				parameterNode = SubElement(biConfigurationsNode, 'parameter')
+				parameterNode.attrib[Attr.NAME]  = k[3:]
+				parameterNode.attrib[Attr.VALUE] = '%d' % attr.value		
+
+		## Output the XML file.
+		#
 		ElementTree(projectNode).write(sys.stdout, encoding = 'UTF-8')
-
-
-##
-#
-class Output(Node):
-
-	def __init__(self):
-		self.frames = {}
-
-
-##
-#
-class Frame(Node):
-
-	NAME      = 'name'
-	CAMERA    = 'camera'
-	RESOLUTION = 'resolution'
-
-	#
-	COLOR_SPACE = 'color_space'
-	TILE_SIZE = 'tile_size'
-	
-
-	SUPPORTED_SOHO_PARAMS = {
-		CAMERA      : soho.SohoParm(CAMERA,      'string', ['/obj/cam1'],  False),
-		COLOR_SPACE : soho.SohoParm(COLOR_SPACE, 'string', ['linear_rgb'], True),
-		TILE_SIZE   : soho.SohoParm(TILE_SIZE,   'int',    [32],           True),
-	}
-
-	def __init__(self):
-		super(Frame, self).__init__()
-
-		self.attrs[Frame.NAME]       = Attr(Frame.NAME,      True,  None, '')
-		self.attrs[Frame.CAMERA]     = Attr(Frame.CAMERA,    True,  None, '')
-		self.attrs[Frame.RESOLUTION] = Attr(Frame.TILE_SIZE, True,  None, ())
-		self.attrs[Frame.TILE_SIZE]  = Attr(Frame.TILE_SIZE, False, 32,   32)
-
-	def Resolve(self, sohoObject, moments):
-		(basicName, extensionName) = os.path.splitext(os.path.basename(hou.hipFile.name()))
-		frameNumber = int(moments[0] * 24 + 1)
-		self.attrs[Frame.NAME].value = '%s.%.4d' % (basicName, frameNumber)
-
-		sohoParmsValues = soho.sohoglue.evaluate(Frame.SUPPORTED_SOHO_PARAMS, None, None)
-		self.attrs[Frame.CAMERA].value = sohoParmsValues[Frame.CAMERA].Value[0]
-		cameraHouNode = hou.node(sohoParmsValues[Frame.CAMERA].Value[0])
-		resx = cameraHouNode.evalParm('resx')
-		resy = cameraHouNode.evalParm('resy')
-		self.attrs[Frame.RESOLUTION].value = (resx, resy)
-
-		if sohoParmsValues.has_key(Frame.TILE_SIZE):
-			tile_size = self.attrs[Frame.TILE_SIZE]
-			tile_size.required = True
-			tile_size.value    = sohoParmsValues[Frame.TILE_SIZE].Value[0]
-			
-
-##
-#
-class Configurations(Node):
-
-	def __init__(self):
-		pass
-
-##
-#
-class Configuration(Node):
-
-	def __init__(self):
-		super(Configuration, self).__init__()
 
 ##
 #
@@ -435,6 +478,8 @@ if __name__ == '__builtin__':
 	frame = Frame()
 	frame.Resolve(None, moments)
 	project.output.frames[frame.attrs[Frame.NAME].value] = frame
+
+	project.configurations.Resolve(None, moments)
 
 	serializer = XmlSerializer()
 	serializer.Serialize(project)
