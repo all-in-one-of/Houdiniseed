@@ -66,8 +66,10 @@ class Project(Node):
 class Scene(Node):
 
 	def __init__(self):
-		self.assembly = Assembly()
-		self.camera   = Camera()
+		self.camera           = Camera()
+		self.assembly         = Assembly()
+		self.assemblyInstance = AssemblyInstance()
+
 
 ##
 #
@@ -79,6 +81,23 @@ class Assembly(Node):
 		super(Assembly, self).__init__()
 
 		self.objects = {}
+		self.objectInstances = {}
+
+
+##
+#
+class AssemblyInstance(Node):
+
+	NAME     = 'name'
+	ASSEMBLY = 'assembly'
+
+	def __init__(self):
+		super(AssemblyInstance, self).__init__()
+
+		self.attrs[AssemblyInstance.NAME]     = Attr(AssemblyInstance.NAME,     'assembly_inst')
+		self.attrs[AssemblyInstance.ASSEMBLY] = Attr(AssemblyInstance.ASSEMBLY, 'assembly')
+
+		self.transform = Transform()
 
 
 ##
@@ -172,13 +191,37 @@ class Object(Assembly):
 
 	def Resolve(self, sohoObject, moments):
 		sopPath = sohoObject.getDefaultedString('object:soppath', sohoObject, [''])[0]
-		self.attrs[Object.NAME] = Attr(Object.NAME, sopPath)
+		self.attrs[Object.NAME] = Attr(Object.NAME, sopPath.replace('/', '__'))
 
 		self.attrs[Object.MODEL] = Attr(Object.MODEL, 'mesh_object')
 
 		sohoGeometry = sohog.SohoGeometry(sopPath, moments[0])
 		objFilePath = self.SaveToWavefrontObj(sopPath, sohoGeometry)
 		
+
+##
+#
+class ObjectInstance(Assembly):
+	
+	##
+	# <object> used attributes.
+	NAME     = 'name'
+	OBJECT   = 'object'
+
+	def __init__(self):
+		super(ObjectInstance, self).__init__()
+
+		self.transform = Transform()
+
+	def Resolve(self, sohoObject, moments):
+		sopPath = sohoObject.getDefaultedString('object:soppath', sohoObject, [''])[0]
+		name = sopPath.replace('/', '__')
+		self.attrs[ObjectInstance.NAME] = Attr(ObjectInstance.NAME, name)
+		self.attrs[ObjectInstance.OBJECT] = Attr(ObjectInstance.OBJECT, name + '.' + name)
+
+		sohoObject.evalFloat('space:world', moments[0], self.transform.matrix.data)
+		self.transform.matrix.data = hou.Matrix4(self.transform.matrix.data).transposed().asTuple()
+
 
 ##
 #
@@ -257,6 +300,7 @@ class Camera(Node):
 		self.attrs[Camera.FOCAL_LENGTH] = Attr(Camera.FOCAL_LENGTH, sohoParmsValues[Camera.FOCAL].Value[0])
 
 		sohoObject.evalFloat('space:world', moments[0], self.transform.matrix.data)
+		self.transform.matrix.data = hou.Matrix4(self.transform.matrix.data).transposed().asTuple()
 
 
 ##
@@ -378,17 +422,16 @@ class XmlSerializer(object):
 
 		transformNode = SubElement(cameraNode, 'transform')
 		matrixNode = SubElement(transformNode, 'matrix')
-		matrixNode.text = '%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f' % (camera.transform.matrix.data[0],  camera.transform.matrix.data[1],  camera.transform.matrix.data[2],  camera.transform.matrix.data[3],
-																			   camera.transform.matrix.data[4],  camera.transform.matrix.data[5],  camera.transform.matrix.data[6],  camera.transform.matrix.data[7],
-																			   camera.transform.matrix.data[8],  camera.transform.matrix.data[9],  camera.transform.matrix.data[10], camera.transform.matrix.data[11],
-																			   camera.transform.matrix.data[11], camera.transform.matrix.data[12], camera.transform.matrix.data[13], camera.transform.matrix.data[14])
+		matrixNode.text = ''
+		for i in xrange(16):
+			matrixNode.text += '%f ' % camera.transform.matrix.data[i]
 
 		## Serialize project:scene:assembly
 		#
 		assemblyNode = SubElement(sceneNode, 'assembly')
 		assemblyNode.attrib[Assembly.NAME] = 'assembly'
 
-		## Serialize project:scene:assembly:object.
+		## Serialize project:scene:assembly:object and project:scene:assembly:object_instance
 		#
 		for (objectName, object) in project.scene.assembly.objects.iteritems():
 			objectNode = SubElement(assemblyNode, 'object')
@@ -399,6 +442,31 @@ class XmlSerializer(object):
 			parameterNode = SubElement(objectNode, 'parameter')
 			parameterNode.attrib[Attr.NAME]  = Object.FILENAME
 			parameterNode.attrib[Attr.VALUE] = object.attrs[Object.FILENAME].value
+
+		## Serialize project:scene:assembly:object_instance
+		#
+		for (objectInstanceName, objectInstance) in project.scene.assembly.objectInstances.iteritems():
+			objectInstanceNode = SubElement(assemblyNode, 'object_instance')
+
+			objectInstanceNode.attrib[ObjectInstance.NAME]   = objectInstance.attrs[ObjectInstance.NAME].value
+			objectInstanceNode.attrib[ObjectInstance.OBJECT] = objectInstance.attrs[ObjectInstance.OBJECT].value
+
+			transformNode = SubElement(objectInstanceNode, 'transform')
+			matrixNode = SubElement(transformNode, 'matrix')
+			matrixNode.text = ''
+			for i in xrange(16):
+				matrixNode.text += '%f ' % objectInstance.transform.matrix.data[i]
+
+		## Serialize project:scene:assembly_instance
+		#
+		assemblyInstanceNode = SubElement(sceneNode, 'assembly_instance')
+		assemblyInstanceNode.attrib[AssemblyInstance.NAME]     = project.scene.assemblyInstance.attrs[AssemblyInstance.NAME].value
+		assemblyInstanceNode.attrib[AssemblyInstance.ASSEMBLY] = project.scene.assemblyInstance.attrs[AssemblyInstance.ASSEMBLY].value
+		transformNode = SubElement(assemblyInstanceNode, 'transform')
+		matrixNode = SubElement(transformNode, 'matrix')
+		matrixNode.text = ''
+		for i in xrange(16):
+			matrixNode.text += '%f ' % project.scene.assemblyInstance.transform.matrix.data[i]
 
 		## Serialize project:output
 		#
@@ -470,10 +538,14 @@ if __name__ == '__builtin__':
 	for sohoGeometry in soho.objectList('objlist:instance'):
 		object = Object()
 		object.Resolve(sohoGeometry, moments)
-
 		objectName = object.attrs[Object.NAME]
 		if not project.scene.assembly.objects.has_key(objectName):
 			project.scene.assembly.objects[objectName] = object
+
+		objectInstance = ObjectInstance()
+		objectInstance.Resolve(sohoGeometry, moments)
+		if not project.scene.assembly.objectInstances.has_key(objectName):
+			project.scene.assembly.objectInstances[objectName] = objectInstance
 
 	frame = Frame()
 	frame.Resolve(None, moments)
