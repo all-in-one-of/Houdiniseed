@@ -271,14 +271,16 @@ class Camera(Node):
 
 	##
 	# Houdini used parameters.
+	APERTURE        = 'aperture'
 	FOCAL           = 'focal'
 	RESX            = 'resx'
 	RESY            = 'resy'
 	
 	SUPPORTED_SOHO_PARAMS = {
-		FOCAL : soho.SohoParm(FOCAL, 'float', [35.0], False),
-		RESX  : soho.SohoParm(RESX,  'int',   [640],  False),
-		RESY  : soho.SohoParm(RESY,  'int',   [480],  False),
+		APERTURE : soho.SohoParm(APERTURE, 'float', [25], False),
+		FOCAL    : soho.SohoParm(FOCAL,    'float', [35.0], False),
+		RESX     : soho.SohoParm(RESX,     'int',   [640],  False),
+		RESY     : soho.SohoParm(RESY,     'int',   [480],  False),
 	}
 
 	def __init__(self):
@@ -295,7 +297,9 @@ class Camera(Node):
 
 		resx = sohoParmsValues[Camera.RESX].Value[0]
 		resy = sohoParmsValues[Camera.RESY].Value[0]
-		self.attrs[Camera.FILM_DIMENSIONS] = Attr(Camera.FILM_DIMENSIONS, (0.025, float(resy) /  float(resx) * 0.025))
+
+		aperture = sohoParmsValues[Camera.APERTURE].Value[0] / 1000.0
+		self.attrs[Camera.FILM_DIMENSIONS] = Attr(Camera.FILM_DIMENSIONS, (aperture, float(resy) /  float(resx) * aperture))
 
 		self.attrs[Camera.FOCAL_LENGTH] = Attr(Camera.FOCAL_LENGTH, sohoParmsValues[Camera.FOCAL].Value[0])
 
