@@ -47,7 +47,7 @@ class Node(object):
 	def __init__(self):
 		self.attrs = {}
 
-	def Resolve(self, sohoObject, moments):
+	def Resolve(self, materialShopNode, moments):
 		pass
 
 
@@ -80,6 +80,10 @@ class Assembly(Node):
 	def __init__(self):
 		super(Assembly, self).__init__()
 
+		self.materials = {}
+		self.colors = {}
+		self.surfaceShaders = {}
+
 		self.objects = {}
 		self.objectInstances = {}
 
@@ -101,6 +105,114 @@ class AssemblyInstance(Node):
 
 
 ##
+#
+class Material(Assembly):
+
+	NAME     = 'name'
+	MODEL    = 'model'
+
+	BSDF           = 'bsdf'
+	EDF            = 'edf'
+	SURFACE_SHADER = 'surface_shader'
+
+	def __init__(self):
+		super(Material, self).__init__()
+
+	def Resolve(self, shopNode, moments):
+		self.attrs[Material.NAME] = Attr(Material.NAME, shopNode.path().replace('/', '__'))
+
+		self.attrs[Material.MODEL] = Attr(Material.MODEL, 'generic_material')
+		
+		bsdf = shopNode.evalParm(Material.BSDF)
+		if bsdf != '':
+			self.attrs[Material.BSDF] = Attr(Material.BSDF, bsdf.replace('/', '__'))
+
+		edf = shopNode.evalParm(Material.EDF)
+		if edf != '':
+			self.attrs[Material.EDF] = Attr(Material.EDF, edf.replace('/', '__'))
+
+		surfaceShader = shopNode.evalParm(Material.SURFACE_SHADER)
+		if surfaceShader == '':
+			soho.error('Must set surface shader for %s' % shopNode.path())
+		self.attrs[Material.SURFACE_SHADER] = Attr(Material.SURFACE_SHADER, surfaceShader.replace('/', '__'))
+
+##
+#
+class Color(Node):
+
+	COLOR = 'color'
+
+	NAME = 'name'
+
+	COLOR_SPACE = 'color_space'
+	COLOR_VALUES = 'color_values'
+	SPECTRAL_VALUES = 'spectral_values'
+	VALUES = 'values'
+	ALPHA = 'alpha'
+	WAVELENGTH = 'wavelength'
+	WAVELENGTH_RANGE_X = 'wavelength_rangex'
+	WAVELENGTH_RANGE_Y = 'wavelength_rangey'
+	MULTIPLIER = 'multiplier'
+
+	def __init__(self):
+		super(Color, self).__init__()
+
+	def Resolve(self, shopNode, moments):
+		self.attrs[Color.NAME] = Attr(Color.NAME, shopNode.path().replace('/', '__'))
+	
+		self.attrs[Color.COLOR_SPACE] = Attr(Color.COLOR_SPACE, shopNode.evalParm(Color.COLOR_SPACE))
+		if self.attrs[Color.COLOR_SPACE].value != 'spectral':
+			self.attrs[Color.VALUES] = Attr(Color.VALUES, shopNode.evalParmTuple(Color.COLOR_VALUES))
+		else:
+			self.attrs[Color.VALUES] = Attr(Color.VALUES, shopNode.evalParm(Color.SPECTRAL_VALUES))
+			self.attrs[Color.WAVELENGTH] = Attr(Color.WAVELENGTH, (shopNode.evalParm(Color.WAVELENGTH_RANGE_X), shopNode.evalParm(Color.WAVELENGTH_RANGE_Y)))
+
+		self.attrs[Color.ALPHA] = Attr(Color.ALPHA, shopNode.evalParm(Color.ALPHA))
+		self.attrs[Color.MULTIPLIER] = Attr(Color.MULTIPLIER, shopNode.evalParm(Color.MULTIPLIER))
+
+##
+#
+class SurfaceShader(Node):
+
+	NAME  = 'name'
+	MODEL = 'model'
+
+	AO_SURFACE_SHADER  = 'ao_surface_shader'
+	AO_SAMPLING_METHOD = 'ao_sampling_method'
+	AO_SAMPLES         = 'ao_samples'
+	AO_MAX_DISTANCE    = 'ao_max_distance'
+
+	CONSTANT_SURFACE_SHADER = 'constant_surface_shader'
+	COLOR = 'constant_color'
+
+	def __init__(self):
+		super(SurfaceShader, self).__init__()
+
+	def Resolve(self, shopNode, moments):
+		self.attrs[SurfaceShader.NAME] = Attr(SurfaceShader.NAME, shopNode.path().replace('/', '__'))
+
+		self.attrs[SurfaceShader.MODEL] = Attr(SurfaceShader.MODEL, shopNode.evalParm(SurfaceShader.MODEL))
+		if self.attrs[SurfaceShader.MODEL].value == SurfaceShader.AO_SURFACE_SHADER:
+			aoSamplingMethod = shopNode.evalParm(SurfaceShader.AO_SAMPLING_METHOD)
+			if aoSamplingMethod != 'uniform':
+				self.attrs[SurfaceShader.AO_SAMPLING_METHOD] = Attr(SurfaceShader.AO_SAMPLING_METHOD, aoSamplingMethod)
+
+			aoSamples = shopNode.evalParm(SurfaceShader.AO_SAMPLES)
+			if aoSamplingMethod != 16:
+				self.attrs[SurfaceShader.AO_SAMPLES] = Attr(SurfaceShader.AO_SAMPLES, aoSamples)
+
+			aoMaxDistance = shopNode.evalParm(SurfaceShader.AO_MAX_DISTANCE)
+			if aoSamplingMethod != 1.0:
+				self.attrs[SurfaceShader.AO_MAX_DISTANCE] = Attr(SurfaceShader.AO_MAX_DISTANCE, aoMaxDistance)
+
+		if self.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
+			constColorNodePath = shopNode.evalParm(SurfaceShader.COLOR)
+			constColorShopNode = hou.node(constColorNodePath)
+			if constColorShopNode is not None:
+				self.attrs[SurfaceShader.COLOR] = Attr(SurfaceShader.COLOR, constColorNodePath.replace('/', '__'))
+
+
+##
 # Represents the <object> in the XML scene description.
 #
 class Object(Assembly):
@@ -111,7 +223,6 @@ class Object(Assembly):
 	MODEL    = 'model'
 
 	FILENAME = 'filename'
-
 
 	def __init__(self):
 		super(Object, self).__init__()
@@ -172,7 +283,7 @@ class Object(Assembly):
 		if hasUV:
 			for i in xrange(geoPrimCount):
 				file.write('f')
-				for j in xrange(sohoGeometry.value(geoPrimVertexCount, i)[0]):
+				for j in reversed(xrange(sohoGeometry.value(geoPrimVertexCount, i)[0])):
 					v = sohoGeometry.vertex(geoVertexPointRef, i, j)
 					file.write(' %d/%d' % (v[0] + 1, fakeUVIndex))
 					fakeUVIndex += 1
@@ -180,7 +291,7 @@ class Object(Assembly):
 		else:
 			for i in xrange(geoPrimCount):
 				file.write('f')
-				for j in xrange(sohoGeometry.value(geoPrimVertexCount, i)[0]):
+				for j in reversed(xrange(sohoGeometry.value(geoPrimVertexCount, i)[0])):
 					v = sohoGeometry.vertex(geoVertexPointRef, i, j)
 					file.write(' %d' % (v[0] + 1))
 				file.write('\n')
@@ -213,6 +324,8 @@ class ObjectInstance(Assembly):
 
 		self.transform = Transform()
 
+		self.assignMaterial = AssignMaterial()
+
 	def Resolve(self, sohoObject, moments):
 		sopPath = sohoObject.getDefaultedString('object:soppath', sohoObject, [''])[0]
 		name = sopPath.replace('/', '__')
@@ -244,6 +357,24 @@ class Transform(Node):
 
 	def Resolve(self, sohoObject, moments):
 		self.attrs[Transform.TIME] = Attr(Transform.TIME, 0)
+
+		
+##
+#
+class AssignMaterial(Node):
+
+	SLOT = 'slot'
+	SIDE = 'side'
+	MATERIAL = 'material'
+
+	def __init__(self):
+		super(AssignMaterial, self).__init__()
+
+		self.attrs[AssignMaterial.SLOT]     = Attr(AssignMaterial.SLOT, 0)
+
+		self.attrs[AssignMaterial.SIDE]     = Attr(AssignMaterial.SIDE, 'front')
+
+		self.attrs[AssignMaterial.MATERIAL] = Attr(AssignMaterial.MATERIAL, '')
 
 
 ##
@@ -435,12 +566,90 @@ class XmlSerializer(object):
 		assemblyNode = SubElement(sceneNode, 'assembly')
 		assemblyNode.attrib[Assembly.NAME] = 'assembly'
 
+		## Serialize project:scene:assembly:material
+		#
+		for (materialName, material) in project.scene.assembly.materials.iteritems():
+			materialNode = SubElement(assemblyNode, 'material')
+
+			materialNode.attrib[Material.NAME] = material.attrs[Material.NAME].value
+
+			materialNode.attrib[Material.MODEL] = material.attrs[Material.MODEL].value
+
+			if material.attrs.has_key(Material.BSDF):
+				parameterNode = parameterNode = SubElement(materialNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = Material.BSDF
+				parameterNode.attrib[Attr.VALUE] = material.attrs[Material.BSDF].value
+
+			if material.attrs.has_key(Material.EDF):
+				parameterNode = parameterNode = SubElement(materialNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = Material.EDF
+				parameterNode.attrib[Attr.VALUE] = material.attrs[Material.EDF].value
+
+			parameterNode = SubElement(materialNode, 'parameter')
+			parameterNode.attrib[Attr.NAME] = Material.SURFACE_SHADER
+			parameterNode.attrib[Attr.VALUE] = material.attrs[Material.SURFACE_SHADER].value
+
+		## Serialize project:scene:assembly:color
+		#
+		for (colorName, color) in project.scene.assembly.colors.iteritems():
+			colorNode = SubElement(assemblyNode, 'color')
+
+			colorNode.attrib[Color.NAME] = color.attrs[Color.NAME].value
+			
+			parameterNode = SubElement(colorNode, 'parameter')
+			parameterNode.attrib[Attr.NAME] = Color.COLOR_SPACE
+			parameterNode.attrib[Attr.VALUE] = color.attrs[Color.COLOR_SPACE].value
+
+			parameterNode = SubElement(colorNode, 'parameter')
+			parameterNode.attrib[Attr.NAME] = Color.MULTIPLIER
+			parameterNode.attrib[Attr.VALUE] = str(color.attrs[Color.MULTIPLIER].value)
+
+			valueNode = SubElement(colorNode, Color.VALUES)
+			if color.attrs[Color.COLOR_SPACE].value != 'spectral':
+				valueNode.text = '%f %f %f' % color.attrs[Color.VALUES].value
+			else:
+				valueNode.text = color.attrs[Color.VALUES].value
+			
+			alphaNode = SubElement(colorNode, Color.ALPHA)
+			alphaNode.text = str(color.attrs[Color.ALPHA].value)
+
+
+		## Serialize project:scene:assembly:surface_shader
+		#
+		for (surfaceShaderName, surfaceShader) in project.scene.assembly.surfaceShaders.iteritems():
+			surfaceShaderNode = SubElement(assemblyNode, 'surface_shader')
+
+			surfaceShaderNode.attrib[SurfaceShader.NAME] = surfaceShader.attrs[SurfaceShader.NAME].value
+
+			surfaceShaderNode.attrib[SurfaceShader.MODEL] = surfaceShader.attrs[SurfaceShader.MODEL].value
+
+			if surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.AO_SURFACE_SHADER:
+				if surfaceShader.attrs.has_key(SurfaceShader.AO_SAMPLING_METHOD):
+					parameterNode = SubElement(surfaceShaderNode, 'parameter')
+					parameterNode.attrib[Attr.NAME] = SurfaceShader.AO_SAMPLING_METHOD[3:]
+					parameterNode.attrib[Attr.VALUE] = surfaceShader.attrs[SurfaceShader.AO_SAMPLING_METHOD].value
+				if surfaceShader.attrs.has_key(SurfaceShader.AO_SAMPLES):
+					parameterNode = SubElement(surfaceShaderNode, 'parameter')
+					parameterNode.attrib[Attr.NAME] = SurfaceShader.AO_SAMPLES[3:]
+					parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.AO_SAMPLES].value)
+				if surfaceShader.attrs.has_key(SurfaceShader.AO_MAX_DISTANCE):
+					parameterNode = SubElement(surfaceShaderNode, 'parameter')
+					parameterNode.attrib[Attr.NAME] = SurfaceShader.AO_MAX_DISTANCE[3:]
+					parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.AO_MAX_DISTANCE].value)
+			
+			if surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = Color.COLOR
+				parameterNode.attrib[Attr.VALUE] = surfaceShader.attrs[SurfaceShader.COLOR].value
+
+
 		## Serialize project:scene:assembly:object and project:scene:assembly:object_instance
 		#
 		for (objectName, object) in project.scene.assembly.objects.iteritems():
 			objectNode = SubElement(assemblyNode, 'object')
 
 			objectNode.attrib[Object.NAME] = object.attrs[Object.NAME].value
+
 			objectNode.attrib[Object.MODEL] = object.attrs[Object.MODEL].value
 
 			parameterNode = SubElement(objectNode, 'parameter')
@@ -460,6 +669,18 @@ class XmlSerializer(object):
 			matrixNode.text = ''
 			for i in xrange(16):
 				matrixNode.text += '%f ' % objectInstance.transform.matrix.data[i]
+
+			# We assign both front and back with the material.
+			assignMaterialNode = SubElement(objectInstanceNode, 'assign_material')
+			assignMaterialNode.attrib[AssignMaterial.SLOT] = str(objectInstance.assignMaterial.attrs[AssignMaterial.SLOT].value)
+			assignMaterialNode.attrib[AssignMaterial.SIDE] = 'front'
+			assignMaterialNode.attrib[AssignMaterial.MATERIAL] = objectInstance.assignMaterial.attrs[AssignMaterial.MATERIAL].value
+
+			assignMaterialNode = SubElement(objectInstanceNode, 'assign_material')
+			assignMaterialNode.attrib[AssignMaterial.SLOT] = str(objectInstance.assignMaterial.attrs[AssignMaterial.SLOT].value)
+			assignMaterialNode.attrib[AssignMaterial.SIDE] = 'back'
+			assignMaterialNode.attrib[AssignMaterial.MATERIAL] = objectInstance.assignMaterial.attrs[AssignMaterial.MATERIAL].value
+			
 
 		## Serialize project:scene:assembly_instance
 		#
@@ -539,17 +760,49 @@ if __name__ == '__builtin__':
 		project.scene.camera = camera
 		break
 
-	for sohoGeometry in soho.objectList('objlist:instance'):
+	# Export geometry data.
+	#
+	for sohoObjectInstance in soho.objectList('objlist:instance'):
 		object = Object()
-		object.Resolve(sohoGeometry, moments)
-		objectName = object.attrs[Object.NAME]
+		object.Resolve(sohoObjectInstance, moments)
+		objectName = object.attrs[Object.NAME].value
 		if not project.scene.assembly.objects.has_key(objectName):
 			project.scene.assembly.objects[objectName] = object
 
-		objectInstance = ObjectInstance()
-		objectInstance.Resolve(sohoGeometry, moments)
+		objectSopNode = hou.node(sohoObjectInstance.getName())
+		materialShopNode = hou.node(objectSopNode.evalParm('shop_materialpath'))
+		if materialShopNode.type().name() != 'appleseedMaterial':
+			soho.error('%s Must be appleseedMaterial.' % materialShopNode.path())
+
+		materialName = materialShopNode.path().replace('/', '__')
+		if not project.scene.assembly.materials.has_key(materialName):
+			material = Material()
+			material.Resolve(materialShopNode, moments)
+			project.scene.assembly.materials[materialName] = material
+
+			surfaceShaderName = material.attrs[Material.SURFACE_SHADER].value
+			if not project.scene.assembly.surfaceShaders.has_key(surfaceShaderName):
+				surfaceShaderShopNodePath = surfaceShaderName.replace('__', '/')
+				surfaceShaderShopNode = hou.node(surfaceShaderShopNodePath)
+				surfaceShader = SurfaceShader()
+				surfaceShader.Resolve(surfaceShaderShopNode, moments)
+				project.scene.assembly.surfaceShaders[surfaceShaderName] = surfaceShader
+				
+				if surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
+					colorName = surfaceShader.attrs[SurfaceShader.COLOR].value
+					if not project.scene.assembly.colors.has_key(colorName):
+						colorShopNodePath = colorName.replace('__', '/')
+						colorShopNode = hou.node(colorShopNodePath)
+						color = Color()
+						color.Resolve(colorShopNode, moments)
+						project.scene.assembly.colors[colorName] = color
+
 		if not project.scene.assembly.objectInstances.has_key(objectName):
+			objectInstance = ObjectInstance()
+			objectInstance.Resolve(sohoObjectInstance, moments)
+			objectInstance.assignMaterial.attrs[AssignMaterial.MATERIAL].value = materialName
 			project.scene.assembly.objectInstances[objectName] = objectInstance
+
 
 	frame = Frame()
 	frame.Resolve(None, moments)
