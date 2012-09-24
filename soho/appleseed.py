@@ -81,6 +81,7 @@ class Assembly(Node):
 		super(Assembly, self).__init__()
 
 		self.materials = {}
+		self.bsdfs = {}
 		self.colors = {}
 		self.surfaceShaders = {}
 
@@ -103,6 +104,42 @@ class AssemblyInstance(Node):
 
 		self.transform = Transform()
 
+		
+##
+#
+class BSDF(Assembly):
+
+	NAME  = 'name'
+	MODEL = 'model'
+
+	ASHIKHMIN_BRDF = 'ashikhmin_brdf'
+	ASHIKHMIN_DIFFUSE_REFLECTANCE = 'ashikhmin_diffuse_reflectance'
+	ASHIKHMIN_GLOSSY_REFLECTANCE = 'ashikhmin_glossy_reflectance'
+	ASHIKHMIN_SHININESS_U = 'ashikhmin_shininess_u'
+	ASHIKHMIN_SHININESS_V = 'ashikhmin_shininess_v'
+
+	KELEMEN_BRDF = 'kelemen_brdf'
+	KELEMEN_MATTE_REFLECTANCE = 'kelemen_matte_reflectance'
+	KELEMEN_SPECULAR_REFLECTANCE = 'kelemen_specular_reflectance'
+	KELEMEN_ROUGHNESS = 'kelemen_roughness'
+
+	def __init__(self):
+		super(BSDF, self).__init__()
+
+	def Resolve(self, shopNode, moments):
+		self.attrs[BSDF.NAME] = Attr(BSDF.NAME, shopNode.path().replace('/', '__'))
+
+		model = Attr(BSDF.MODEL, shopNode.evalParm(BSDF.MODEL))
+		self.attrs[BSDF.MODEL] = model
+		if model.value == BSDF.ASHIKHMIN_BRDF:
+			self.attrs[BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE] = Attr(BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE, shopNode.evalParm(BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE).replace('/', '__'))
+			self.attrs[BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE] = Attr(BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE, shopNode.evalParm(BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE).replace('/', '__'))
+			self.attrs[BSDF.ASHIKHMIN_SHININESS_U] = Attr(BSDF.ASHIKHMIN_SHININESS_U, shopNode.evalParm(BSDF.ASHIKHMIN_SHININESS_U))
+			self.attrs[BSDF.ASHIKHMIN_SHININESS_V] = Attr(BSDF.ASHIKHMIN_SHININESS_V, shopNode.evalParm(BSDF.ASHIKHMIN_SHININESS_V))
+		elif model.value == BSDF.KELEMEN_BRDF:
+			self.attrs[BSDF.KELEMEN_MATTE_REFLECTANCE] = Attr(BSDF.KELEMEN_MATTE_REFLECTANCE, shopNode.evalParm(BSDF.KELEMEN_MATTE_REFLECTANCE).replace('/', '__'))
+			self.attrs[BSDF.KELEMEN_SPECULAR_REFLECTANCE] = Attr(BSDF.KELEMEN_SPECULAR_REFLECTANCE, shopNode.evalParm(BSDF.KELEMEN_SPECULAR_REFLECTANCE).replace('/', '__'))
+			self.attrs[BSDF.KELEMEN_ROUGHNESS] = Attr(BSDF.KELEMEN_ROUGHNESS, shopNode.evalParm(BSDF.KELEMEN_ROUGHNESS))
 
 ##
 #
@@ -183,7 +220,7 @@ class SurfaceShader(Node):
 	AO_MAX_DISTANCE    = 'ao_max_distance'
 
 	CONSTANT_SURFACE_SHADER = 'constant_surface_shader'
-	COLOR = 'constant_color'
+	CONSTANT_COLOR = 'constant_color'
 
 	def __init__(self):
 		super(SurfaceShader, self).__init__()
@@ -206,10 +243,7 @@ class SurfaceShader(Node):
 				self.attrs[SurfaceShader.AO_MAX_DISTANCE] = Attr(SurfaceShader.AO_MAX_DISTANCE, aoMaxDistance)
 
 		if self.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
-			constColorNodePath = shopNode.evalParm(SurfaceShader.COLOR)
-			constColorShopNode = hou.node(constColorNodePath)
-			if constColorShopNode is not None:
-				self.attrs[SurfaceShader.COLOR] = Attr(SurfaceShader.COLOR, constColorNodePath.replace('/', '__'))
+			self.attrs[SurfaceShader.CONSTANT_COLOR] = Attr(SurfaceShader.CONSTANT_COLOR, shopNode.evalParm(SurfaceShader.CONSTANT_COLOR).replace('/', '__'))
 
 
 ##
@@ -589,6 +623,43 @@ class XmlSerializer(object):
 			parameterNode.attrib[Attr.NAME] = Material.SURFACE_SHADER
 			parameterNode.attrib[Attr.VALUE] = material.attrs[Material.SURFACE_SHADER].value
 
+		## Serialize project:scene:assembly:bsdf
+		#
+		for (bsdfName, bsdf) in project.scene.assembly.bsdfs.iteritems():
+			bsdfNode = SubElement(assemblyNode, 'bsdf')
+
+			bsdfNode.attrib[BSDF.NAME] = bsdf.attrs[BSDF.NAME].value
+			bsdfNode.attrib[BSDF.MODEL] = bsdf.attrs[BSDF.MODEL].value
+
+			if bsdf.attrs[BSDF.MODEL].value == BSDF.ASHIKHMIN_BRDF:
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE[10:]
+				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE].value
+	
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE[10:]
+				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE].value
+
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.ASHIKHMIN_SHININESS_U[10:]
+				parameterNode.attrib[Attr.VALUE] = str(bsdf.attrs[BSDF.ASHIKHMIN_SHININESS_U].value)
+
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.ASHIKHMIN_SHININESS_V[10:]
+				parameterNode.attrib[Attr.VALUE] = str(bsdf.attrs[BSDF.ASHIKHMIN_SHININESS_V].value)
+			elif bsdf.attrs[BSDF.MODEL].value == BSDF.KELEMEN_BRDF:
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.KELEMEN_MATTE_REFLECTANCE[8:]
+				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.KELEMEN_MATTE_REFLECTANCE].value
+				
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.KELEMEN_SPECULAR_REFLECTANCE[8:]
+				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.KELEMEN_SPECULAR_REFLECTANCE].value
+
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.KELEMEN_ROUGHNESS[8:]
+				parameterNode.attrib[Attr.VALUE] = str(bsdf.attrs[BSDF.KELEMEN_ROUGHNESS].value)
+
 		## Serialize project:scene:assembly:color
 		#
 		for (colorName, color) in project.scene.assembly.colors.iteritems():
@@ -612,7 +683,6 @@ class XmlSerializer(object):
 			
 			alphaNode = SubElement(colorNode, Color.ALPHA)
 			alphaNode.text = str(color.attrs[Color.ALPHA].value)
-
 
 		## Serialize project:scene:assembly:surface_shader
 		#
@@ -639,9 +709,8 @@ class XmlSerializer(object):
 			
 			if surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
 				parameterNode = SubElement(surfaceShaderNode, 'parameter')
-				parameterNode.attrib[Attr.NAME] = Color.COLOR
-				parameterNode.attrib[Attr.VALUE] = surfaceShader.attrs[SurfaceShader.COLOR].value
-
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.CONSTANT_COLOR[9:]
+				parameterNode.attrib[Attr.VALUE] = surfaceShader.attrs[SurfaceShader.CONSTANT_COLOR].value
 
 		## Serialize project:scene:assembly:object and project:scene:assembly:object_instance
 		#
@@ -735,6 +804,12 @@ class XmlSerializer(object):
 		#
 		ElementTree(projectNode).write(sys.stdout, encoding = 'UTF-8')
 
+def ResolveColor(colorNodePath, moments):
+	colorNode = hou.node(colorNodePath)
+	color = Color()
+	color.Resolve(colorNode, moments)
+	return color
+
 ##
 #
 if __name__ == '__builtin__':
@@ -780,6 +855,34 @@ if __name__ == '__builtin__':
 			material.Resolve(materialShopNode, moments)
 			project.scene.assembly.materials[materialName] = material
 
+			bsdfName = material.attrs[Material.BSDF].value
+			if not project.scene.assembly.bsdfs.has_key(bsdfName):
+				bsdfShopNodePath = bsdfName.replace('__', '/')
+				bsdfShopNode = hou.node(bsdfShopNodePath)
+				bsdf = BSDF()
+				bsdf.Resolve(bsdfShopNode, moments)
+				project.scene.assembly.bsdfs[bsdfName] = bsdf
+				
+				bsdfModel = bsdf.attrs[BSDF.MODEL].value
+				if bsdfModel == BSDF.ASHIKHMIN_BRDF:
+					diffuseNodeName = bsdf.attrs[BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE].value
+					if not project.scene.assembly.colors.has_key(diffuseNodeName):
+						diffuseNodePath = diffuseNodeName.replace('__', '/')
+						project.scene.assembly.colors[diffuseNodeName] = ResolveColor(diffuseNodePath, moments)
+					glossyNodeName = bsdf.attrs[BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE].value
+					if not project.scene.assembly.colors.has_key(glossyNodeName):
+						glossyNodePath = glossyNodeName.replace('__', '/')
+						project.scene.assembly.colors[glossyNodeName] = ResolveColor(glossyNodePath, moments)
+				if bsdfModel == BSDF.KELEMEN_BRDF:
+					matteNodeName = bsdf.attrs[BSDF.KELEMEN_MATTE_REFLECTANCE].value
+					if not project.scene.assembly.colors.has_key(matteNodeName):
+						matteNodePath = matteNodeName.replace('__', '/')
+						project.scene.assembly.colors[matteNodeName] = ResolveColor(matteNodePath, moments)
+					specularNodeName = bsdf.attrs[BSDF.KELEMEN_SPECULAR_REFLECTANCE].value
+					if not project.scene.assembly.colors.has_key(specularNodeName):
+						specularNodePath = specularNodeName.replace('__', '/')
+						project.scene.assembly.colors[specularNodeName] = ResolveColor(specularNodePath, moments)
+
 			surfaceShaderName = material.attrs[Material.SURFACE_SHADER].value
 			if not project.scene.assembly.surfaceShaders.has_key(surfaceShaderName):
 				surfaceShaderShopNodePath = surfaceShaderName.replace('__', '/')
@@ -789,13 +892,10 @@ if __name__ == '__builtin__':
 				project.scene.assembly.surfaceShaders[surfaceShaderName] = surfaceShader
 				
 				if surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
-					colorName = surfaceShader.attrs[SurfaceShader.COLOR].value
+					colorName = surfaceShader.attrs[SurfaceShader.CONSTANT_COLOR].value
 					if not project.scene.assembly.colors.has_key(colorName):
-						colorShopNodePath = colorName.replace('__', '/')
-						colorShopNode = hou.node(colorShopNodePath)
-						color = Color()
-						color.Resolve(colorShopNode, moments)
-						project.scene.assembly.colors[colorName] = color
+						colorNodePath = colorName.replace('__', '/')
+						project.scene.assembly.colors[colorName] = ResolveColor(colorNodePath, moments)
 
 		if not project.scene.assembly.objectInstances.has_key(objectName):
 			objectInstance = ObjectInstance()
