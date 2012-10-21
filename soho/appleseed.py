@@ -222,13 +222,20 @@ class SurfaceShader(Node):
 	CONSTANT_SURFACE_SHADER = 'constant_surface_shader'
 	CONSTANT_COLOR = 'constant_color'
 
+	DIAGNOSTIC_SURFACE_SHADER = 'diagnostic_surface_shader'
+	DIAGNOSTIC_MODE = 'diagnostic_mode'
+	DIAGNOSTIC_AO = 'ambient_occlusion'
+	DIAGNOSTIC_AO_SAMPLES = 'diagnostic_ao_samples'
+	DIAGNOSTIC_AO_MAX_DISTANCE = 'diagnostic_ao_max_distance'
+
 	def __init__(self):
 		super(SurfaceShader, self).__init__()
 
 	def Resolve(self, shopNode, moments):
 		self.attrs[SurfaceShader.NAME] = Attr(SurfaceShader.NAME, shopNode.path().replace('/', '__'))
-
 		self.attrs[SurfaceShader.MODEL] = Attr(SurfaceShader.MODEL, shopNode.evalParm(SurfaceShader.MODEL))
+
+		# AO
 		if self.attrs[SurfaceShader.MODEL].value == SurfaceShader.AO_SURFACE_SHADER:
 			aoSamplingMethod = shopNode.evalParm(SurfaceShader.AO_SAMPLING_METHOD)
 			if aoSamplingMethod != 'uniform':
@@ -242,8 +249,21 @@ class SurfaceShader(Node):
 			if aoSamplingMethod != 1.0:
 				self.attrs[SurfaceShader.AO_MAX_DISTANCE] = Attr(SurfaceShader.AO_MAX_DISTANCE, aoMaxDistance)
 
+		# Constant
 		if self.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
 			self.attrs[SurfaceShader.CONSTANT_COLOR] = Attr(SurfaceShader.CONSTANT_COLOR, shopNode.evalParm(SurfaceShader.CONSTANT_COLOR).replace('/', '__'))
+
+		# Diagnostic
+		if self.attrs[SurfaceShader.MODEL].value == SurfaceShader.DIAGNOSTIC_SURFACE_SHADER:
+			self.attrs[SurfaceShader.DIAGNOSTIC_MODE] = Attr(SurfaceShader.DIAGNOSTIC_MODE, shopNode.evalParm(SurfaceShader.DIAGNOSTIC_MODE))
+			
+			if self.attrs[SurfaceShader.DIAGNOSTIC_MODE].value == SurfaceShader.DIAGNOSTIC_AO:
+				diagAOSamples = shopNode.evalParm(SurfaceShader.DIAGNOSTIC_AO_SAMPLES)
+				if diagAOSamples != 16:
+					self.attrs[SurfaceShader.DIAGNOSTIC_AO_SAMPLES] = Attr(SurfaceShader.DIAGNOSTIC_AO_SAMPLES, diagAOSamples)
+				diagAOMaxDistance = shopNode.evalParm(SurfaceShader.DIAGNOSTIC_AO_MAX_DISTANCE)
+				if diagAOMaxDistance != 1.0:
+					self.attrs[SurfaceShader.DIAGNOSTIC_AO_MAX_DISTANCE] = Attr(SurfaceShader.DIAGNOSTIC_AO_MAX_DISTANCE, diagAOMaxDistance)
 
 
 ##
@@ -712,6 +732,21 @@ class XmlSerializer(object):
 				parameterNode.attrib[Attr.NAME] = SurfaceShader.CONSTANT_COLOR[9:]
 				parameterNode.attrib[Attr.VALUE] = surfaceShader.attrs[SurfaceShader.CONSTANT_COLOR].value
 
+			if surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.DIAGNOSTIC_SURFACE_SHADER:
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.DIAGNOSTIC_MODE[11:]
+				parameterNode.attrib[Attr.VALUE] = surfaceShader.attrs[SurfaceShader.DIAGNOSTIC_MODE].value
+				if surfaceShader.attrs[SurfaceShader.DIAGNOSTIC_MODE].value == SurfaceShader.DIAGNOSTIC_AO:
+					if surfaceShader.attrs.has_key(SurfaceShader.DIAGNOSTIC_AO_SAMPLES):
+						parameterNode = SubElement(surfaceShaderNode, 'parameter')
+						parameterNode.attrib[Attr.NAME] = 'ambient_occlusion.samples'
+						parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.DIAGNOSTIC_AO_SAMPLES].value)
+					if surfaceShader.attrs.has_key(SurfaceShader.DIAGNOSTIC_AO_MAX_DISTANCE):
+						parameterNode = SubElement(surfaceShaderNode, 'parameter')
+						parameterNode.attrib[Attr.NAME] = 'ambient_occlusion.max_distance'
+						parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.DIAGNOSTIC_AO_MAX_DISTANCE].value)
+						
+
 		## Serialize project:scene:assembly:object and project:scene:assembly:object_instance
 		#
 		for (objectName, object) in project.scene.assembly.objects.iteritems():
@@ -804,14 +839,60 @@ class XmlSerializer(object):
 		#
 		ElementTree(projectNode).write(sys.stdout, encoding = 'UTF-8')
 
-def ResolveColor(colorNodePath, moments):
-	colorNode = hou.node(colorNodePath)
-	color = Color()
-	color.Resolve(colorNode, moments)
-	return color
 
 ##
 #
+def AddColor(colorNodeName, project, moments):
+	if not project.scene.assembly.colors.has_key(colorNodeName):
+		colorNodePath = colorNodeName.replace('__', '/')
+		colorNode = hou.node(colorNodePath)
+		color = Color()
+		color.Resolve(colorNode, moments)
+		project.scene.assembly.colors[colorNodeName] = color
+
+def AddMaterial(materialNodeName, project, moments):
+	materialNodePath = materialNodeName.replace('__', '/')
+	materialNode = hou.node(materialNodePath)
+	if materialNode.type().name() != 'appleseedMaterial':
+			soho.error('%s Must be appleseedMaterial.' % materialNode.path())
+
+	if not project.scene.assembly.materials.has_key(materialNodeName):
+		material = Material()
+		material.Resolve(materialNode, moments)
+		project.scene.assembly.materials[materialNodeName] = material
+
+		bsdfName = material.attrs[Material.BSDF].value
+		if not project.scene.assembly.bsdfs.has_key(bsdfName):
+			bsdfShopNodePath = bsdfName.replace('__', '/')
+			bsdfShopNode = hou.node(bsdfShopNodePath)
+			bsdf = BSDF()
+			bsdf.Resolve(bsdfShopNode, moments)
+			project.scene.assembly.bsdfs[bsdfName] = bsdf
+			
+			bsdfModel = bsdf.attrs[BSDF.MODEL].value
+			if bsdfModel == BSDF.ASHIKHMIN_BRDF:
+				diffuseNodeName = bsdf.attrs[BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE].value
+				AddColor(diffuseNodeName, project, moments)
+				glossyNodeName = bsdf.attrs[BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE].value
+				AddColor(glossyNodeName, project, moments)
+			if bsdfModel == BSDF.KELEMEN_BRDF:
+				matteNodeName = bsdf.attrs[BSDF.KELEMEN_MATTE_REFLECTANCE].value
+				AddColor(matteNodeName, project, moments)
+				specularNodeName = bsdf.attrs[BSDF.KELEMEN_SPECULAR_REFLECTANCE].value
+				AddColor(specularNodeName, project, moments)
+
+			surfaceShaderName = material.attrs[Material.SURFACE_SHADER].value
+			if not project.scene.assembly.surfaceShaders.has_key(surfaceShaderName):
+				surfaceShaderShopNodePath = surfaceShaderName.replace('__', '/')
+				surfaceShaderShopNode = hou.node(surfaceShaderShopNodePath)
+				surfaceShader = SurfaceShader()
+				surfaceShader.Resolve(surfaceShaderShopNode, moments)
+				project.scene.assembly.surfaceShaders[surfaceShaderName] = surfaceShader
+				
+				if surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
+					colorNodeName = surfaceShader.attrs[SurfaceShader.CONSTANT_COLOR].value
+					AddColor(colorNodeName, project, moments)
+
 if __name__ == '__builtin__':
 
 	moments = soho.getDefaultedFloat('state:time', [0.0])
@@ -845,62 +926,15 @@ if __name__ == '__builtin__':
 			project.scene.assembly.objects[objectName] = object
 
 		objectSopNode = hou.node(sohoObjectInstance.getName())
-		materialShopNode = hou.node(objectSopNode.evalParm('shop_materialpath'))
-		if materialShopNode.type().name() != 'appleseedMaterial':
-			soho.error('%s Must be appleseedMaterial.' % materialShopNode.path())
 
-		materialName = materialShopNode.path().replace('/', '__')
-		if not project.scene.assembly.materials.has_key(materialName):
-			material = Material()
-			material.Resolve(materialShopNode, moments)
-			project.scene.assembly.materials[materialName] = material
-
-			bsdfName = material.attrs[Material.BSDF].value
-			if not project.scene.assembly.bsdfs.has_key(bsdfName):
-				bsdfShopNodePath = bsdfName.replace('__', '/')
-				bsdfShopNode = hou.node(bsdfShopNodePath)
-				bsdf = BSDF()
-				bsdf.Resolve(bsdfShopNode, moments)
-				project.scene.assembly.bsdfs[bsdfName] = bsdf
-				
-				bsdfModel = bsdf.attrs[BSDF.MODEL].value
-				if bsdfModel == BSDF.ASHIKHMIN_BRDF:
-					diffuseNodeName = bsdf.attrs[BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE].value
-					if not project.scene.assembly.colors.has_key(diffuseNodeName):
-						diffuseNodePath = diffuseNodeName.replace('__', '/')
-						project.scene.assembly.colors[diffuseNodeName] = ResolveColor(diffuseNodePath, moments)
-					glossyNodeName = bsdf.attrs[BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE].value
-					if not project.scene.assembly.colors.has_key(glossyNodeName):
-						glossyNodePath = glossyNodeName.replace('__', '/')
-						project.scene.assembly.colors[glossyNodeName] = ResolveColor(glossyNodePath, moments)
-				if bsdfModel == BSDF.KELEMEN_BRDF:
-					matteNodeName = bsdf.attrs[BSDF.KELEMEN_MATTE_REFLECTANCE].value
-					if not project.scene.assembly.colors.has_key(matteNodeName):
-						matteNodePath = matteNodeName.replace('__', '/')
-						project.scene.assembly.colors[matteNodeName] = ResolveColor(matteNodePath, moments)
-					specularNodeName = bsdf.attrs[BSDF.KELEMEN_SPECULAR_REFLECTANCE].value
-					if not project.scene.assembly.colors.has_key(specularNodeName):
-						specularNodePath = specularNodeName.replace('__', '/')
-						project.scene.assembly.colors[specularNodeName] = ResolveColor(specularNodePath, moments)
-
-			surfaceShaderName = material.attrs[Material.SURFACE_SHADER].value
-			if not project.scene.assembly.surfaceShaders.has_key(surfaceShaderName):
-				surfaceShaderShopNodePath = surfaceShaderName.replace('__', '/')
-				surfaceShaderShopNode = hou.node(surfaceShaderShopNodePath)
-				surfaceShader = SurfaceShader()
-				surfaceShader.Resolve(surfaceShaderShopNode, moments)
-				project.scene.assembly.surfaceShaders[surfaceShaderName] = surfaceShader
-				
-				if surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
-					colorName = surfaceShader.attrs[SurfaceShader.CONSTANT_COLOR].value
-					if not project.scene.assembly.colors.has_key(colorName):
-						colorNodePath = colorName.replace('__', '/')
-						project.scene.assembly.colors[colorName] = ResolveColor(colorNodePath, moments)
-
+		materialNodePath = objectSopNode.evalParm('shop_materialpath')
+		materialNodeName = materialNodePath.replace('/', '__')
+		AddMaterial(materialNodeName, project, moments)
+		
 		if not project.scene.assembly.objectInstances.has_key(objectName):
 			objectInstance = ObjectInstance()
 			objectInstance.Resolve(sohoObjectInstance, moments)
-			objectInstance.assignMaterial.attrs[AssignMaterial.MATERIAL].value = materialName
+			objectInstance.assignMaterial.attrs[AssignMaterial.MATERIAL].value = materialNodeName
 			project.scene.assembly.objectInstances[objectName] = objectInstance
 
 
