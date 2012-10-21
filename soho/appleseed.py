@@ -228,6 +228,17 @@ class SurfaceShader(Node):
 	DIAGNOSTIC_AO_SAMPLES = 'diagnostic_ao_samples'
 	DIAGNOSTIC_AO_MAX_DISTANCE = 'diagnostic_ao_max_distance'
 
+	FAST_SSS_SURFACE_SHADER = 'fast_sss_surface_shader'
+	FAST_SSS_SCALE = 'fast_sss_scale'
+	FAST_SSS_AMBIENT_SSS = 'fast_sss_ambient_sss'
+	FAST_SSS_VIEW_DEP_SSS = 'fast_sss_view_dep_sss'
+	FAST_SSS_DIFFUSE = 'fast_sss_diffuse'
+	FAST_SSS_POWER = 'fast_sss_power'
+	FAST_SSS_DISTORTION = 'fast_sss_distortion'
+	FAST_SSS_ALBEDO = 'fast_sss_albedo'
+	FAST_SSS_LIGHT_SAMPLES = 'fast_sss_light_samples'
+	FAST_SSS_OCCLUSION_SAMPLES = 'fast_sss_occlusion_samples'
+
 	def __init__(self):
 		super(SurfaceShader, self).__init__()
 
@@ -250,11 +261,11 @@ class SurfaceShader(Node):
 				self.attrs[SurfaceShader.AO_MAX_DISTANCE] = Attr(SurfaceShader.AO_MAX_DISTANCE, aoMaxDistance)
 
 		# Constant
-		if self.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
+		elif self.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
 			self.attrs[SurfaceShader.CONSTANT_COLOR] = Attr(SurfaceShader.CONSTANT_COLOR, shopNode.evalParm(SurfaceShader.CONSTANT_COLOR).replace('/', '__'))
 
 		# Diagnostic
-		if self.attrs[SurfaceShader.MODEL].value == SurfaceShader.DIAGNOSTIC_SURFACE_SHADER:
+		elif self.attrs[SurfaceShader.MODEL].value == SurfaceShader.DIAGNOSTIC_SURFACE_SHADER:
 			self.attrs[SurfaceShader.DIAGNOSTIC_MODE] = Attr(SurfaceShader.DIAGNOSTIC_MODE, shopNode.evalParm(SurfaceShader.DIAGNOSTIC_MODE))
 			
 			if self.attrs[SurfaceShader.DIAGNOSTIC_MODE].value == SurfaceShader.DIAGNOSTIC_AO:
@@ -264,6 +275,19 @@ class SurfaceShader(Node):
 				diagAOMaxDistance = shopNode.evalParm(SurfaceShader.DIAGNOSTIC_AO_MAX_DISTANCE)
 				if diagAOMaxDistance != 1.0:
 					self.attrs[SurfaceShader.DIAGNOSTIC_AO_MAX_DISTANCE] = Attr(SurfaceShader.DIAGNOSTIC_AO_MAX_DISTANCE, diagAOMaxDistance)
+
+		# Fast SSS
+		elif self.attrs[SurfaceShader.MODEL].value == SurfaceShader.FAST_SSS_SURFACE_SHADER:
+			self.attrs[SurfaceShader.FAST_SSS_SCALE]        = Attr(SurfaceShader.FAST_SSS_SCALE, shopNode.evalParm(SurfaceShader.FAST_SSS_SCALE))
+			self.attrs[SurfaceShader.FAST_SSS_AMBIENT_SSS]  = Attr(SurfaceShader.FAST_SSS_AMBIENT_SSS, shopNode.evalParm(SurfaceShader.FAST_SSS_AMBIENT_SSS))
+			self.attrs[SurfaceShader.FAST_SSS_VIEW_DEP_SSS] = Attr(SurfaceShader.FAST_SSS_VIEW_DEP_SSS, shopNode.evalParm(SurfaceShader.FAST_SSS_VIEW_DEP_SSS))
+			self.attrs[SurfaceShader.FAST_SSS_DIFFUSE] = Attr(SurfaceShader.FAST_SSS_DIFFUSE, shopNode.evalParm(SurfaceShader.FAST_SSS_DIFFUSE))
+			self.attrs[SurfaceShader.FAST_SSS_POWER] = Attr(SurfaceShader.FAST_SSS_POWER, shopNode.evalParm(SurfaceShader.FAST_SSS_POWER))
+			self.attrs[SurfaceShader.FAST_SSS_DISTORTION] = Attr(SurfaceShader.FAST_SSS_DISTORTION, shopNode.evalParm(SurfaceShader.FAST_SSS_DISTORTION))
+			self.attrs[SurfaceShader.FAST_SSS_ALBEDO] = Attr(SurfaceShader.FAST_SSS_ALBEDO, shopNode.evalParm(SurfaceShader.FAST_SSS_ALBEDO).replace('/', '__'))
+			self.attrs[SurfaceShader.FAST_SSS_LIGHT_SAMPLES] = Attr(SurfaceShader.FAST_SSS_LIGHT_SAMPLES, shopNode.evalParm(SurfaceShader.FAST_SSS_LIGHT_SAMPLES))
+			self.attrs[SurfaceShader.FAST_SSS_OCCLUSION_SAMPLES] = Attr(SurfaceShader.FAST_SSS_OCCLUSION_SAMPLES, shopNode.evalParm(SurfaceShader.FAST_SSS_OCCLUSION_SAMPLES))
+			
 
 
 ##
@@ -727,12 +751,12 @@ class XmlSerializer(object):
 					parameterNode.attrib[Attr.NAME] = SurfaceShader.AO_MAX_DISTANCE[3:]
 					parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.AO_MAX_DISTANCE].value)
 			
-			if surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
+			elif surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
 				parameterNode = SubElement(surfaceShaderNode, 'parameter')
 				parameterNode.attrib[Attr.NAME] = SurfaceShader.CONSTANT_COLOR[9:]
 				parameterNode.attrib[Attr.VALUE] = surfaceShader.attrs[SurfaceShader.CONSTANT_COLOR].value
 
-			if surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.DIAGNOSTIC_SURFACE_SHADER:
+			elif surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.DIAGNOSTIC_SURFACE_SHADER:
 				parameterNode = SubElement(surfaceShaderNode, 'parameter')
 				parameterNode.attrib[Attr.NAME] = SurfaceShader.DIAGNOSTIC_MODE[11:]
 				parameterNode.attrib[Attr.VALUE] = surfaceShader.attrs[SurfaceShader.DIAGNOSTIC_MODE].value
@@ -745,7 +769,43 @@ class XmlSerializer(object):
 						parameterNode = SubElement(surfaceShaderNode, 'parameter')
 						parameterNode.attrib[Attr.NAME] = 'ambient_occlusion.max_distance'
 						parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.DIAGNOSTIC_AO_MAX_DISTANCE].value)
-						
+			
+			elif surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.FAST_SSS_SURFACE_SHADER:
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.FAST_SSS_SCALE[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.FAST_SSS_SCALE].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.FAST_SSS_AMBIENT_SSS[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.FAST_SSS_AMBIENT_SSS].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.FAST_SSS_VIEW_DEP_SSS[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.FAST_SSS_VIEW_DEP_SSS].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.FAST_SSS_DIFFUSE[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.FAST_SSS_DIFFUSE].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.FAST_SSS_POWER[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.FAST_SSS_POWER].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.FAST_SSS_DISTORTION[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.FAST_SSS_DISTORTION].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.FAST_SSS_ALBEDO[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.FAST_SSS_ALBEDO].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.FAST_SSS_LIGHT_SAMPLES[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.FAST_SSS_LIGHT_SAMPLES].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.FAST_SSS_OCCLUSION_SAMPLES[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.FAST_SSS_OCCLUSION_SAMPLES].value)
 
 		## Serialize project:scene:assembly:object and project:scene:assembly:object_instance
 		#
@@ -892,6 +952,9 @@ def AddMaterial(materialNodeName, project, moments):
 				if surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
 					colorNodeName = surfaceShader.attrs[SurfaceShader.CONSTANT_COLOR].value
 					AddColor(colorNodeName, project, moments)
+				elif surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.FAST_SSS_SURFACE_SHADER:
+					albedoNodeName = surfaceShader.attrs[SurfaceShader.FAST_SSS_ALBEDO].value
+					AddColor(albedoNodeName, project, moments)
 
 if __name__ == '__builtin__':
 
