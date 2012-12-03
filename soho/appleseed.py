@@ -239,6 +239,37 @@ class SurfaceShader(Node):
 	FAST_SSS_LIGHT_SAMPLES = 'fast_sss_light_samples'
 	FAST_SSS_OCCLUSION_SAMPLES = 'fast_sss_occlusion_samples'
 
+	PHYSICAL_SURFACE_SHADER = 'physical_surface_shader'
+	PHYSICAL_COLOR_MULTIPLIER = 'physical_color_multiplier'
+	PHYSICAL_ALPHA_MULTIPLIER = 'physical_alpha_multiplier'
+	PHYSICAL_AERIAL_PERSP_MODE = 'physical_aerial_persp_mode'
+	PHYSICAL_AERIAL_PERSP_MODE_NONE = 'none'
+	PHYSICAL_AERIAL_PERSP_MODE_ENVIRONMENT_SHADER = 'environment_shader'
+	PHYSICAL_AERIAL_PERSP_MODE_SKY_COLOR = 'sky_color'
+	PHYSICAL_AERIAL_PERSP_SKY_COLOR = 'physical_aerial_persp_sky_color'
+	PHYSICAL_AERIAL_PERSP_DISTANCE = 'physical_aerial_persp_distance'
+	PHYSICAL_AERIAL_PERSP_INTENSITY = 'physical_aerial_persp_intensity'
+
+	SMOKE_SURFACE_SHADER = 'smoke_surface_shader'
+	SMOKE_BOUNDING_BOX = 'smoke_bounding_box'
+	SMOKE_BOUNDING_BOX_MIN = 'smoke_bounding_box_min'
+	SMOKE_BOUNDING_BOX_MAX = 'smoke_bounding_box_max'
+	SMOKE_SHADING_MODE = 'smoke_shading_mode'
+	SMOKE_INTERPOLATION_MODE = 'smoke_interpolation_mode'
+	SMOKE_ISOSURFACE_THRESHOLD = 'smoke_isosurface_threshold'
+	SMOKE_FILENAME = 'smoke_filename'
+	SMOKE_STEP_SIZE = 'smoke_step_size'
+	SMOKE_DENSITY_CUTOFF = 'smoke_density_cutoff'
+	SMOKE_DENSITY_SCALE = 'smoke_density_scale'
+	SMOKE_SMOKE_COLOR = 'smoke_smoke_color'
+	SMOKE_FUEL_COLOR = 'smoke_fuel_color'
+	SMOKE_FUEL_SCALE = 'smoke_fuel_scale'
+	SMOKE_LIGHT_DIRECTION = 'smoke_light_direction'
+	SMOKE_LIGHT_COLOR = 'smoke_light_color'
+	SMOKE_COLOR_SCALE = 'smoke_color_scale'
+	SMOKE_VOLUME_OPACITY = 'smoke_volume_opacity'
+	SMOKE_SHADOW_OPACITY = 'smoke_shadow_opacity'
+
 	def __init__(self):
 		super(SurfaceShader, self).__init__()
 
@@ -288,6 +319,44 @@ class SurfaceShader(Node):
 			self.attrs[SurfaceShader.FAST_SSS_LIGHT_SAMPLES] = Attr(SurfaceShader.FAST_SSS_LIGHT_SAMPLES, shopNode.evalParm(SurfaceShader.FAST_SSS_LIGHT_SAMPLES))
 			self.attrs[SurfaceShader.FAST_SSS_OCCLUSION_SAMPLES] = Attr(SurfaceShader.FAST_SSS_OCCLUSION_SAMPLES, shopNode.evalParm(SurfaceShader.FAST_SSS_OCCLUSION_SAMPLES))
 			
+		# Physical
+		elif self.attrs[SurfaceShader.MODEL].value == SurfaceShader.PHYSICAL_SURFACE_SHADER:
+			self.attrs[SurfaceShader.PHYSICAL_COLOR_MULTIPLIER] = Attr(SurfaceShader.PHYSICAL_COLOR_MULTIPLIER, shopNode.evalParm(SurfaceShader.PHYSICAL_COLOR_MULTIPLIER))
+			self.attrs[SurfaceShader.PHYSICAL_ALPHA_MULTIPLIER] = Attr(SurfaceShader.PHYSICAL_ALPHA_MULTIPLIER, shopNode.evalParm(SurfaceShader.PHYSICAL_ALPHA_MULTIPLIER))
+
+			aerialPerspMode = shopNode.evalParm(SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE)
+			self.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE] = Attr(SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE, aerialPerspMode)
+			if aerialPerspMode != SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE_NONE:
+				if aerialPerspMode == SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE_SKY_COLOR:
+					self.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_SKY_COLOR] = Attr(SurfaceShader.PHYSICAL_AERIAL_PERSP_SKY_COLOR, shopNode.evalParm(SurfaceShader.PHYSICAL_AERIAL_PERSP_SKY_COLOR).replace('/', '__'))
+			self.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_DISTANCE] = Attr(SurfaceShader.PHYSICAL_AERIAL_PERSP_DISTANCE, shopNode.evalParm(SurfaceShader.PHYSICAL_AERIAL_PERSP_DISTANCE))
+			self.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_INTENSITY] = Attr(SurfaceShader.PHYSICAL_AERIAL_PERSP_INTENSITY, shopNode.evalParm(SurfaceShader.PHYSICAL_AERIAL_PERSP_INTENSITY))
+
+		# Smoke
+		elif self.attrs[SurfaceShader.MODEL].value == SurfaceShader.SMOKE_SURFACE_SHADER:
+			boundingBoxMin = (shopNode.evalParm(SurfaceShader.SMOKE_BOUNDING_BOX_MIN + 'x'), shopNode.evalParm(SurfaceShader.SMOKE_BOUNDING_BOX_MIN + 'y'), shopNode.evalParm(SurfaceShader.SMOKE_BOUNDING_BOX_MIN + 'z'))
+			self.attrs[SurfaceShader.SMOKE_BOUNDING_BOX_MIN]     = Attr(SurfaceShader.SMOKE_BOUNDING_BOX_MIN,     boundingBoxMin)
+			boundingBoxMax = (shopNode.evalParm(SurfaceShader.SMOKE_BOUNDING_BOX_MAX + 'x'), shopNode.evalParm(SurfaceShader.SMOKE_BOUNDING_BOX_MAX + 'y'), shopNode.evalParm(SurfaceShader.SMOKE_BOUNDING_BOX_MAX + 'z'))
+			self.attrs[SurfaceShader.SMOKE_BOUNDING_BOX_MAX]     = Attr(SurfaceShader.SMOKE_BOUNDING_BOX_MAX,     boundingBoxMax)
+			self.attrs[SurfaceShader.SMOKE_SHADING_MODE]         = Attr(SurfaceShader.SMOKE_SHADING_MODE,         shopNode.evalParm(SurfaceShader.SMOKE_SHADING_MODE))
+			self.attrs[SurfaceShader.SMOKE_INTERPOLATION_MODE]   = Attr(SurfaceShader.SMOKE_INTERPOLATION_MODE,   shopNode.evalParm(SurfaceShader.SMOKE_INTERPOLATION_MODE))
+			self.attrs[SurfaceShader.SMOKE_ISOSURFACE_THRESHOLD] = Attr(SurfaceShader.SMOKE_ISOSURFACE_THRESHOLD, shopNode.evalParm(SurfaceShader.SMOKE_ISOSURFACE_THRESHOLD))
+			self.attrs[SurfaceShader.SMOKE_FILENAME]             = Attr(SurfaceShader.SMOKE_FILENAME,             shopNode.evalParm(SurfaceShader.SMOKE_FILENAME))
+			self.attrs[SurfaceShader.SMOKE_STEP_SIZE]            = Attr(SurfaceShader.SMOKE_STEP_SIZE,            shopNode.evalParm(SurfaceShader.SMOKE_STEP_SIZE))
+			self.attrs[SurfaceShader.SMOKE_DENSITY_CUTOFF]       = Attr(SurfaceShader.SMOKE_DENSITY_CUTOFF,       shopNode.evalParm(SurfaceShader.SMOKE_DENSITY_CUTOFF))
+			self.attrs[SurfaceShader.SMOKE_DENSITY_SCALE]        = Attr(SurfaceShader.SMOKE_DENSITY_SCALE,        shopNode.evalParm(SurfaceShader.SMOKE_DENSITY_SCALE))
+			smokeColor = (shopNode.evalParm(SurfaceShader.SMOKE_SMOKE_COLOR + 'r'), shopNode.evalParm(SurfaceShader.SMOKE_SMOKE_COLOR + 'g'), shopNode.evalParm(SurfaceShader.SMOKE_SMOKE_COLOR + 'b'))
+			self.attrs[SurfaceShader.SMOKE_SMOKE_COLOR]          = Attr(SurfaceShader.SMOKE_SMOKE_COLOR,          smokeColor)
+			fuelColor = (shopNode.evalParm(SurfaceShader.SMOKE_FUEL_COLOR + 'r'), shopNode.evalParm(SurfaceShader.SMOKE_FUEL_COLOR + 'g'), shopNode.evalParm(SurfaceShader.SMOKE_FUEL_COLOR + 'b'))
+			self.attrs[SurfaceShader.SMOKE_FUEL_COLOR]           = Attr(SurfaceShader.SMOKE_FUEL_COLOR,           fuelColor)
+			self.attrs[SurfaceShader.SMOKE_FUEL_SCALE]           = Attr(SurfaceShader.SMOKE_FUEL_SCALE,           shopNode.evalParm(SurfaceShader.SMOKE_FUEL_SCALE))
+			lightDirection = (shopNode.evalParm(SurfaceShader.SMOKE_LIGHT_DIRECTION + 'x'), shopNode.evalParm(SurfaceShader.SMOKE_LIGHT_DIRECTION + 'y'), shopNode.evalParm(SurfaceShader.SMOKE_LIGHT_DIRECTION + 'z'))
+			self.attrs[SurfaceShader.SMOKE_LIGHT_DIRECTION]      = Attr(SurfaceShader.SMOKE_LIGHT_DIRECTION,      lightDirection)
+			lightColor = (shopNode.evalParm(SurfaceShader.SMOKE_LIGHT_COLOR + 'r'), shopNode.evalParm(SurfaceShader.SMOKE_LIGHT_COLOR + 'g'), shopNode.evalParm(SurfaceShader.SMOKE_LIGHT_COLOR + 'b'))
+			self.attrs[SurfaceShader.SMOKE_LIGHT_COLOR]          = Attr(SurfaceShader.SMOKE_LIGHT_COLOR,          lightColor)
+			self.attrs[SurfaceShader.SMOKE_COLOR_SCALE]          = Attr(SurfaceShader.SMOKE_COLOR_SCALE,          shopNode.evalParm(SurfaceShader.SMOKE_COLOR_SCALE))
+			self.attrs[SurfaceShader.SMOKE_VOLUME_OPACITY]       = Attr(SurfaceShader.SMOKE_VOLUME_OPACITY,       shopNode.evalParm(SurfaceShader.SMOKE_VOLUME_OPACITY))
+			self.attrs[SurfaceShader.SMOKE_SHADOW_OPACITY]       = Attr(SurfaceShader.SMOKE_SHADOW_OPACITY,       shopNode.evalParm(SurfaceShader.SMOKE_SHADOW_OPACITY))
 
 
 ##
@@ -807,6 +876,107 @@ class XmlSerializer(object):
 				parameterNode.attrib[Attr.NAME] = SurfaceShader.FAST_SSS_OCCLUSION_SAMPLES[9:]
 				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.FAST_SSS_OCCLUSION_SAMPLES].value)
 
+			elif surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.PHYSICAL_SURFACE_SHADER:
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.PHYSICAL_COLOR_MULTIPLIER[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.PHYSICAL_COLOR_MULTIPLIER].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.PHYSICAL_ALPHA_MULTIPLIER[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.PHYSICAL_ALPHA_MULTIPLIER].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.PHYSICAL_ALPHA_MULTIPLIER[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.PHYSICAL_ALPHA_MULTIPLIER].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE[9:]
+				aerialPerspMode = surfaceShader.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE].value
+				if aerialPerspMode != SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE_NONE:
+					if aerialPerspMode == SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE_SKY_COLOR:
+						parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE].value)
+					
+						parameterNode = SubElement(surfaceShaderNode, 'parameter')
+						parameterNode.attrib[Attr.NAME] = SurfaceShader.PHYSICAL_AERIAL_PERSP_SKY_COLOR[9:]
+						parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_SKY_COLOR].value)
+				else:
+					parameterNode.attrib[Attr.VALUE] = SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE_NONE
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.PHYSICAL_AERIAL_PERSP_DISTANCE[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_DISTANCE].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.PHYSICAL_AERIAL_PERSP_INTENSITY[9:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_INTENSITY].value)
+
+			elif surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.SMOKE_SURFACE_SHADER:
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_BOUNDING_BOX[6:]
+				parameterNode.attrib[Attr.VALUE] = '%f %f %f %f %f %f' % (surfaceShader.attrs[SurfaceShader.SMOKE_BOUNDING_BOX_MIN].value + surfaceShader.attrs[SurfaceShader.SMOKE_BOUNDING_BOX_MAX].value)
+				
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_SHADING_MODE[6:]
+				parameterNode.attrib[Attr.VALUE] = surfaceShader.attrs[SurfaceShader.SMOKE_SHADING_MODE].value
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_INTERPOLATION_MODE[6:]
+				parameterNode.attrib[Attr.VALUE] = surfaceShader.attrs[SurfaceShader.SMOKE_INTERPOLATION_MODE].value
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_ISOSURFACE_THRESHOLD[6:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.SMOKE_ISOSURFACE_THRESHOLD].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_FILENAME[6:]
+				parameterNode.attrib[Attr.VALUE] = surfaceShader.attrs[SurfaceShader.SMOKE_FILENAME].value
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_STEP_SIZE[6:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.SMOKE_STEP_SIZE].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_DENSITY_CUTOFF[6:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.SMOKE_DENSITY_CUTOFF].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_DENSITY_SCALE[6:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.SMOKE_DENSITY_SCALE].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_SMOKE_COLOR[6:]
+				parameterNode.attrib[Attr.VALUE] = '%f %f %f' % surfaceShader.attrs[SurfaceShader.SMOKE_SMOKE_COLOR].value
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_FUEL_COLOR[6:]
+				parameterNode.attrib[Attr.VALUE] = '%f %f %f' % surfaceShader.attrs[SurfaceShader.SMOKE_FUEL_COLOR].value
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_FUEL_SCALE[6:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.SMOKE_FUEL_SCALE].value)
+				
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_LIGHT_DIRECTION[6:]
+				parameterNode.attrib[Attr.VALUE] = '%f %f %f' % surfaceShader.attrs[SurfaceShader.SMOKE_LIGHT_DIRECTION].value
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_LIGHT_COLOR[6:]
+				parameterNode.attrib[Attr.VALUE] = '%f %f %f' % surfaceShader.attrs[SurfaceShader.SMOKE_LIGHT_COLOR].value
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_COLOR_SCALE[6:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.SMOKE_COLOR_SCALE].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_VOLUME_OPACITY[6:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.SMOKE_VOLUME_OPACITY].value)
+
+				parameterNode = SubElement(surfaceShaderNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_SHADOW_OPACITY[6:]
+				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.SMOKE_SHADOW_OPACITY].value)
+				
+
+
 		## Serialize project:scene:assembly:object and project:scene:assembly:object_instance
 		#
 		for (objectName, object) in project.scene.assembly.objects.iteritems():
@@ -948,13 +1118,18 @@ def AddMaterial(materialNodeName, project, moments):
 				surfaceShader = SurfaceShader()
 				surfaceShader.Resolve(surfaceShaderShopNode, moments)
 				project.scene.assembly.surfaceShaders[surfaceShaderName] = surfaceShader
-				
+
+				# Collect color from surface shader.
 				if surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.CONSTANT_SURFACE_SHADER:
 					colorNodeName = surfaceShader.attrs[SurfaceShader.CONSTANT_COLOR].value
 					AddColor(colorNodeName, project, moments)
 				elif surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.FAST_SSS_SURFACE_SHADER:
 					albedoNodeName = surfaceShader.attrs[SurfaceShader.FAST_SSS_ALBEDO].value
 					AddColor(albedoNodeName, project, moments)
+				elif surfaceShader.attrs[SurfaceShader.MODEL].value == SurfaceShader.PHYSICAL_SURFACE_SHADER:
+					if surfaceShader.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE].value == SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE_SKY_COLOR:
+						skyColorNodeName = surfaceShader.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_SKY_COLOR].value
+						AddColor(skyColorNodeName, project, moments)
 
 if __name__ == '__builtin__':
 
