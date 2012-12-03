@@ -21,6 +21,7 @@
 
 import os
 import sys
+import uuid
 
 import hou
 import soho
@@ -79,6 +80,8 @@ class Assembly(Node):
 
 	def __init__(self):
 		super(Assembly, self).__init__()
+
+		self.lights = {}
 
 		self.materials = {}
 		self.bsdfs = {}
@@ -140,6 +143,59 @@ class BSDF(Assembly):
 			self.attrs[BSDF.KELEMEN_MATTE_REFLECTANCE] = Attr(BSDF.KELEMEN_MATTE_REFLECTANCE, shopNode.evalParm(BSDF.KELEMEN_MATTE_REFLECTANCE).replace('/', '__'))
 			self.attrs[BSDF.KELEMEN_SPECULAR_REFLECTANCE] = Attr(BSDF.KELEMEN_SPECULAR_REFLECTANCE, shopNode.evalParm(BSDF.KELEMEN_SPECULAR_REFLECTANCE).replace('/', '__'))
 			self.attrs[BSDF.KELEMEN_ROUGHNESS] = Attr(BSDF.KELEMEN_ROUGHNESS, shopNode.evalParm(BSDF.KELEMEN_ROUGHNESS))
+
+
+##
+#
+class Light(Assembly):
+
+	NAME = 'name'
+	MODEL = 'model'
+
+	POINT_LIGHT = 'point_light'
+	SPOT_LIGHT = 'spot_light'
+
+	EXITANCE = 'exitance'
+	INNER_ANGLE = 'inner_angle'
+	OUTER_ANGLE = 'outer_angle'
+
+	CONE_ENABLE = 'coneenable'
+	CONE_ANGLE = 'coneangle'
+	CONE_DELTA = 'conedelta'
+	LIGHT_COLOR = 'light_color'
+	SUPPORTED_SOHO_PARAMS = {
+		CONE_ENABLE : soho.SohoParm(CONE_ENABLE, 'int', [0], False),
+		CONE_ANGLE : soho.SohoParm(CONE_ANGLE, 'float', [90], False),
+		CONE_DELTA : soho.SohoParm(CONE_DELTA, 'float', [0], False),
+		LIGHT_COLOR : soho.SohoParm(LIGHT_COLOR, 'real', [1, 1, 1], False)
+	}
+
+	def __init__(self):
+		super(Light, self).__init__()
+
+		self.transform = Transform()
+		self.exitance = Color()
+
+	def Resolve(self, sohoLight, moments):
+		self.attrs[Light.NAME] = Attr(Light.NAME, sohoLight.getName().replace('/', '__'))
+	
+		sohoLight.evalFloat('space:world', moments[0], self.transform.matrix.data)
+		self.transform.matrix.data = hou.Matrix4(self.transform.matrix.data).transposed().asTuple()
+
+		sohoParamsValues = sohoLight.evaluate(Light.SUPPORTED_SOHO_PARAMS, moments[0])		
+		if sohoParamsValues[Light.CONE_ENABLE].Value[0]:
+			self.attrs[Light.MODEL] = Attr(Light.MODEL, Light.SPOT_LIGHT)
+			
+			self.attrs[Light.INNER_ANGLE] = Attr(Light.INNER_ANGLE, sohoParamsValues[Light.CONE_ANGLE].Value[0] - sohoParamsValues[Light.CONE_DELTA].Value[0])
+			self.attrs[Light.OUTER_ANGLE]  = Attr(Light.CONE_DELTA, sohoParamsValues[Light.CONE_ANGLE].Value[0])
+		else:
+			self.attrs[Light.MODEL] = Attr(Light.MODEL, Light.POINT_LIGHT)
+
+		# TODO: Connect with SHOP
+		self.exitance.attrs[Color.NAME] = Attr(Color.NAME, sohoLight.getName().replace('/', '__') + str(uuid.uuid4()))
+		self.exitance.attrs[Color.COLOR_SPACE] = Attr(Color.NAME, 'srgb')
+		self.exitance.attrs[Color.VALUES] = Attr(Color.VALUES, tuple(sohoParamsValues[Light.LIGHT_COLOR].Value))
+		
 
 ##
 #
@@ -713,6 +769,34 @@ class XmlSerializer(object):
 		assemblyNode = SubElement(sceneNode, 'assembly')
 		assemblyNode.attrib[Assembly.NAME] = 'assembly'
 
+		## Serialize project:scene:assembly:light
+		#
+		for (lightName, light) in project.scene.assembly.lights.iteritems():
+			lightNode = SubElement(assemblyNode, 'light')
+
+			lightNode.attrib[Light.NAME] = light.attrs[Light.NAME].value
+
+			lightNode.attrib[Light.MODEL] = light.attrs[Light.MODEL].value
+
+			parameterNode = SubElement(lightNode, 'parameter')
+			parameterNode.attrib[Attr.NAME] = Light.EXITANCE
+			parameterNode.attrib[Attr.VALUE] = light.exitance.attrs[Color.NAME].value
+
+			if light.attrs[Light.MODEL].value == Light.SPOT_LIGHT:
+				parameterNode = SubElement(lightNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = Light.INNER_ANGLE
+				parameterNode.attrib[Attr.VALUE] = str(light.attrs[Light.INNER_ANGLE].value)
+
+				parameterNode = SubElement(lightNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = Light.OUTER_ANGLE
+				parameterNode.attrib[Attr.VALUE] = str(light.attrs[Light.OUTER_ANGLE].value)
+
+			transformNode = SubElement(lightNode, 'transform')
+			matrixNode = SubElement(transformNode, 'matrix')
+			matrixNode.text = ''
+			for i in xrange(16):
+				matrixNode.text += '%f ' % light.transform.matrix.data[i]
+
 		## Serialize project:scene:assembly:material
 		#
 		for (materialName, material) in project.scene.assembly.materials.iteritems():
@@ -784,18 +868,20 @@ class XmlSerializer(object):
 			parameterNode.attrib[Attr.NAME] = Color.COLOR_SPACE
 			parameterNode.attrib[Attr.VALUE] = color.attrs[Color.COLOR_SPACE].value
 
-			parameterNode = SubElement(colorNode, 'parameter')
-			parameterNode.attrib[Attr.NAME] = Color.MULTIPLIER
-			parameterNode.attrib[Attr.VALUE] = str(color.attrs[Color.MULTIPLIER].value)
+			if color.attrs.has_key(Color.MULTIPLIER):
+				parameterNode = SubElement(colorNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = Color.MULTIPLIER
+				parameterNode.attrib[Attr.VALUE] = str(color.attrs[Color.MULTIPLIER].value)
 
 			valueNode = SubElement(colorNode, Color.VALUES)
 			if color.attrs[Color.COLOR_SPACE].value != 'spectral':
 				valueNode.text = '%f %f %f' % color.attrs[Color.VALUES].value
 			else:
 				valueNode.text = color.attrs[Color.VALUES].value
-			
-			alphaNode = SubElement(colorNode, Color.ALPHA)
-			alphaNode.text = str(color.attrs[Color.ALPHA].value)
+
+			if color.attrs.has_key(Color.ALPHA):
+				alphaNode = SubElement(colorNode, Color.ALPHA)
+				alphaNode.text = str(color.attrs[Color.ALPHA].value)
 
 		## Serialize project:scene:assembly:surface_shader
 		#
@@ -974,8 +1060,6 @@ class XmlSerializer(object):
 				parameterNode = SubElement(surfaceShaderNode, 'parameter')
 				parameterNode.attrib[Attr.NAME] = SurfaceShader.SMOKE_SHADOW_OPACITY[6:]
 				parameterNode.attrib[Attr.VALUE] = str(surfaceShader.attrs[SurfaceShader.SMOKE_SHADOW_OPACITY].value)
-				
-
 
 		## Serialize project:scene:assembly:object and project:scene:assembly:object_instance
 		#
@@ -1153,6 +1237,21 @@ if __name__ == '__builtin__':
 		camera.Resolve(sohoCamera, moments)
 		project.scene.camera = camera
 		break
+
+	# Export light.
+	# TODO: Not use wrangler now
+	#
+	for sohoLight in soho.objectList('objlist:light'):
+		sohoLightPath = sohoLight.getDefaultedString('object:name', sohoLight, [''])[0]
+		sohoLightName = sohoLightPath.replace('/', '__')
+		if not project.scene.assembly.lights.has_key(sohoLightName):
+			light = Light()
+			light.Resolve(sohoLight, moments)
+			project.scene.assembly.lights[sohoLightName] = light
+
+			exitanceName = light.exitance.attrs[Color.NAME].value
+			if not project.scene.assembly.colors.has_key(exitanceName):
+				project.scene.assembly.colors[exitanceName] = light.exitance
 
 	# Export geometry data.
 	#
