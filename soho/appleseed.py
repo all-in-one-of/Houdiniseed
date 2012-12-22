@@ -39,14 +39,14 @@ theProject = None
 #
 def ProcessColor(colorNodeName, project, moments):
 	if not project.scene.assembly.colors.has_key(colorNodeName):
-		colorNodePath = colorNodeName.replace('__', '/')
+		colorNodePath = colorNodeName
 		colorNode = hou.node(colorNodePath)
 		color = Color()
 		color.Resolve(colorNode, moments)
 		project.scene.assembly.colors[colorNodeName] = color
 
 def ProcessMaterial(materialNodeName, project, moments):
-	materialNodePath = materialNodeName.replace('__', '/')
+	materialNodePath = materialNodeName
 	materialNode = hou.node(materialNodePath)
 	if materialNode.type().name() != 'appleseedMaterial':
 			soho.error('%s Must be appleseedMaterial.' % materialNode.path())
@@ -59,7 +59,7 @@ def ProcessMaterial(materialNodeName, project, moments):
 		if material.attrs.has_key(Material.BSDF):
 			bsdfName = material.attrs[Material.BSDF]
 			if not project.scene.assembly.bsdfs.has_key(bsdfName):
-				bsdfShopNodePath = bsdfName.replace('__', '/')
+				bsdfShopNodePath = bsdfName
 				bsdfShopNode = hou.node(bsdfShopNodePath)
 				bsdf = BSDF()
 				bsdf.Resolve(bsdfShopNode, moments)
@@ -94,7 +94,7 @@ def ProcessMaterial(materialNodeName, project, moments):
 		if material.attrs.has_key(Material.EDF):
 			edfName = material.attrs[Material.EDF]
 			if not project.scene.assembly.edfs.has_key(edfName):
-				edfShopNodePath = edfName.replace('__', '/')
+				edfShopNodePath = edfName
 				edfShopNode = hou.node(edfShopNodePath)
 				edf = EDF()
 				edf.Resolve(edfShopNode, moments)
@@ -105,8 +105,7 @@ def ProcessMaterial(materialNodeName, project, moments):
 
 		surfaceShaderName = material.attrs[Material.SURFACE_SHADER]
 		if not project.scene.assembly.surfaceShaders.has_key(surfaceShaderName):
-			surfaceShaderShopNodePath = surfaceShaderName.replace('__', '/')
-			surfaceShaderShopNode = hou.node(surfaceShaderShopNodePath)
+			surfaceShaderShopNode = hou.node(surfaceShaderName)
 			surfaceShader = SurfaceShader()
 			surfaceShader.Resolve(surfaceShaderShopNode, moments)
 			project.scene.assembly.surfaceShaders[surfaceShaderName] = surfaceShader
@@ -246,48 +245,48 @@ class BSDF(Assembly):
 		self.bsdf1 = None
 
 	def AsAshikhminBrdf(self, shopNode, moments):
-		self.attrs[BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE] = shopNode.evalParm(BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE).replace('/', '__')
-		self.attrs[BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE] = shopNode.evalParm(BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE).replace('/', '__')
+		self.attrs[BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE] = shopNode.evalParm(BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE)
+		self.attrs[BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE] = shopNode.evalParm(BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE)
 		self.attrs[BSDF.ASHIKHMIN_SHININESS_U] = Attr(shopNode.evalParm(BSDF.ASHIKHMIN_SHININESS_U))
 		self.attrs[BSDF.ASHIKHMIN_SHININESS_V] = Attr(shopNode.evalParm(BSDF.ASHIKHMIN_SHININESS_V))
 
 	def AsKelemenBrdf(self, shopNode, moments):
-		self.attrs[BSDF.KELEMEN_MATTE_REFLECTANCE] = shopNode.evalParm(BSDF.KELEMEN_MATTE_REFLECTANCE).replace('/', '__')
-		self.attrs[BSDF.KELEMEN_SPECULAR_REFLECTANCE] = shopNode.evalParm(BSDF.KELEMEN_SPECULAR_REFLECTANCE).replace('/', '__')
+		self.attrs[BSDF.KELEMEN_MATTE_REFLECTANCE] = shopNode.evalParm(BSDF.KELEMEN_MATTE_REFLECTANCE)
+		self.attrs[BSDF.KELEMEN_SPECULAR_REFLECTANCE] = shopNode.evalParm(BSDF.KELEMEN_SPECULAR_REFLECTANCE)
 		self.attrs[BSDF.KELEMEN_ROUGHNESS] = Attr(shopNode.evalParm(BSDF.KELEMEN_ROUGHNESS))
 
 	def AsLambertianBrdf(self, shopNode, moments):
-		self.attrs[BSDF.LAMBERTIAN_REFLECTANCE] = shopNode.evalParm(BSDF.LAMBERTIAN_REFLECTANCE).replace('/', '__')
+		self.attrs[BSDF.LAMBERTIAN_REFLECTANCE] = shopNode.evalParm(BSDF.LAMBERTIAN_REFLECTANCE)
 
 	def AsSpecularBrdf(self, shopNode, moments):
-		self.attrs[BSDF.SPECULAR_BRDF_REFLECTANCE] = shopNode.evalParm(BSDF.SPECULAR_BRDF_REFLECTANCE).replace('/', '__')
+		self.attrs[BSDF.SPECULAR_BRDF_REFLECTANCE] = shopNode.evalParm(BSDF.SPECULAR_BRDF_REFLECTANCE)
 
 	def AsSpecularBtdf(self, shopNode, moments):
-		self.attrs[BSDF.SPECULAR_BTDF_REFLECTANCE] = shopNode.evalParm(BSDF.SPECULAR_BTDF_REFLECTANCE).replace('/', '__')
-		self.attrs[BSDF.SPECULAR_BTDF_TRANSMITTANCE] = shopNode.evalParm(BSDF.SPECULAR_BTDF_TRANSMITTANCE).replace('/', '__')
+		self.attrs[BSDF.SPECULAR_BTDF_REFLECTANCE] = shopNode.evalParm(BSDF.SPECULAR_BTDF_REFLECTANCE)
+		self.attrs[BSDF.SPECULAR_BTDF_TRANSMITTANCE] = shopNode.evalParm(BSDF.SPECULAR_BTDF_TRANSMITTANCE)
 		self.attrs[BSDF.SPECULAR_BTDF_FROM_IOR] = shopNode.evalParm(BSDF.SPECULAR_BTDF_FROM_IOR)
 		self.attrs[BSDF.SPECULAR_BTDF_TO_IOR] = shopNode.evalParm(BSDF.SPECULAR_BTDF_TO_IOR)
 
 	def Resolve(self, shopNode, moments):
-		self.attrs[BSDF.NAME] = shopNode.path().replace('/', '__')
+		self.attrs[BSDF.NAME] = shopNode.path()
 
 		model = shopNode.evalParm(BSDF.MODEL)
 		self.attrs[BSDF.MODEL] = model
 		if model == BSDF.ASHIKHMIN_BRDF:
-			AsAshikhminBRDF(shopNode, moments)
+			self.AsAshikhminBRDF(shopNode, moments)
 		if model == BSDF.BSDF_MIX:
 			self.attrs[BSDF.BSDF_MIX_BSDF0] = shopNode.evalParm(BSDF.BSDF_MIX_BSDF0)
 			self.attrs[BSDF.BSDF_MIX_WEIGHT0] = Attr(shopNode.evalParm(BSDF.BSDF_MIX_WEIGHT0))
 			self.attrs[BSDF.BSDF_MIX_BSDF1] = shopNode.evalParm(BSDF.BSDF_MIX_BSDF1)
 			self.attrs[BSDF.BSDF_MIX_WEIGHT1] = Attr(shopNode.evalParm(BSDF.BSDF_MIX_WEIGHT1))
 		elif model == BSDF.KELEMEN_BRDF:
-			AsKelemenBrdf(shopNode, moments)
+			self.AsKelemenBrdf(shopNode, moments)
 		elif model == BSDF.LAMBERTIAN_BRDF:
-			AsLambertianBrdf(shopNode, moments)
+			self.AsLambertianBrdf(shopNode, moments)
 		elif model == BSDF.SPECULAR_BRDF:
-			AsSpecularBrdf(shopNode, moments)
+			self.AsSpecularBrdf(shopNode, moments)
 		elif model == BSDF.SPECULAR_BTDF:
-			AsSpecularBtdf(shopNode, moments)
+			self.AsSpecularBtdf(shopNode, moments)
 
 
 ##
@@ -303,10 +302,10 @@ class EDF(Assembly):
 		super(EDF, self).__init__()
 
 	def Resolve(self, shopNode, moments):
-		self.attrs[EDF.NAME] = shopNode.path().replace('/', '__')
+		self.attrs[EDF.NAME] = shopNode.path()
 		self.attrs[EDF.MODEL] = 'diffuse_edf'
 		self.attrs[EDF.MODEL] = 'diffuse_edf'
-		self.attrs[EDF.EXITANCE] = shopNode.evalParm(EDF.EXITANCE).replace('/', '__')
+		self.attrs[EDF.EXITANCE] = shopNode.evalParm(EDF.EXITANCE)
 
 ##
 #
@@ -340,7 +339,7 @@ class Light(Assembly):
 		self.exitance = Color()
 
 	def Resolve(self, sohoLight, moments):
-		self.attrs[Light.NAME] = sohoLight.getName().replace('/', '__')
+		self.attrs[Light.NAME] = sohoLight.getName()
 	
 		sohoLight.evalFloat('space:world', moments[0], self.transform.matrix.data)
 		self.transform.matrix.data = hou.Matrix4(self.transform.matrix.data).transposed().asTuple()
@@ -355,7 +354,7 @@ class Light(Assembly):
 			self.attrs[Light.MODEL] = Light.POINT_LIGHT
 
 		# TODO: Connect with SHOP
-		self.exitance.attrs[Color.NAME] = sohoLight.getName().replace('/', '__') + str(uuid.uuid4())
+		self.exitance.attrs[Color.NAME] = sohoLight.getName() + str(uuid.uuid4())
 		self.exitance.attrs[Color.COLOR_SPACE] = 'srgb'
 		self.exitance.attrs[Color.VALUES] = Attr(sohoParamsValues[Light.LIGHT_COLOR].Value)
 		
@@ -375,22 +374,22 @@ class Material(Assembly):
 		super(Material, self).__init__()
 
 	def Resolve(self, shopNode, moments):
-		self.attrs[Material.NAME] = shopNode.path().replace('/', '__')
+		self.attrs[Material.NAME] = shopNode.path()
 
 		self.attrs[Material.MODEL] = 'generic_material'
 		
 		bsdf = shopNode.evalParm(Material.BSDF)
 		if bsdf != '':
-			self.attrs[Material.BSDF] = bsdf.replace('/', '__')
+			self.attrs[Material.BSDF] = bsdf
 
 		edf = shopNode.evalParm(Material.EDF)
 		if edf != '':
-			self.attrs[Material.EDF] = edf.replace('/', '__')
+			self.attrs[Material.EDF] = edf
 
 		surfaceShader = shopNode.evalParm(Material.SURFACE_SHADER)
 		if surfaceShader == '':
 			soho.error('Must set surface shader for %s' % shopNode.path())
-		self.attrs[Material.SURFACE_SHADER] = surfaceShader.replace('/', '__')
+		self.attrs[Material.SURFACE_SHADER] = surfaceShader
 
 ##
 #
@@ -414,7 +413,7 @@ class Color(Node):
 		super(Color, self).__init__()
 
 	def Resolve(self, shopNode, moments):
-		self.attrs[Color.NAME] = shopNode.path().replace('/', '__')
+		self.attrs[Color.NAME] = shopNode.path()
 	
 		self.attrs[Color.COLOR_SPACE] = shopNode.evalParm(Color.COLOR_SPACE)
 		if self.attrs[Color.COLOR_SPACE] != 'spectral':
@@ -493,7 +492,7 @@ class SurfaceShader(Node):
 		super(SurfaceShader, self).__init__()
 
 	def Resolve(self, shopNode, moments):
-		self.attrs[SurfaceShader.NAME] = shopNode.path().replace('/', '__')
+		self.attrs[SurfaceShader.NAME] = shopNode.path()
 		self.attrs[SurfaceShader.MODEL] = shopNode.evalParm(SurfaceShader.MODEL)
 
 		model = self.attrs[SurfaceShader.MODEL]
@@ -513,7 +512,7 @@ class SurfaceShader(Node):
 
 		# Constant
 		elif model == SurfaceShader.CONSTANT_SURFACE_SHADER:
-			self.attrs[SurfaceShader.CONSTANT_COLOR] = shopNode.evalParm(SurfaceShader.CONSTANT_COLOR).replace('/', '__')
+			self.attrs[SurfaceShader.CONSTANT_COLOR] = shopNode.evalParm(SurfaceShader.CONSTANT_COLOR)
 
 		# Diagnostic
 		elif model == SurfaceShader.DIAGNOSTIC_SURFACE_SHADER:
@@ -535,7 +534,7 @@ class SurfaceShader(Node):
 			self.attrs[SurfaceShader.FAST_SSS_DIFFUSE] = Attr(shopNode.evalParm(SurfaceShader.FAST_SSS_DIFFUSE))
 			self.attrs[SurfaceShader.FAST_SSS_POWER] = Attr(shopNode.evalParm(SurfaceShader.FAST_SSS_POWER))
 			self.attrs[SurfaceShader.FAST_SSS_DISTORTION] = Attr(shopNode.evalParm(SurfaceShader.FAST_SSS_DISTORTION))
-			self.attrs[SurfaceShader.FAST_SSS_ALBEDO] = shopNode.evalParm(SurfaceShader.FAST_SSS_ALBEDO).replace('/', '__')
+			self.attrs[SurfaceShader.FAST_SSS_ALBEDO] = shopNode.evalParm(SurfaceShader.FAST_SSS_ALBEDO)
 			self.attrs[SurfaceShader.FAST_SSS_LIGHT_SAMPLES] = Attr(shopNode.evalParm(SurfaceShader.FAST_SSS_LIGHT_SAMPLES))
 			self.attrs[SurfaceShader.FAST_SSS_OCCLUSION_SAMPLES] = Attr(shopNode.evalParm(SurfaceShader.FAST_SSS_OCCLUSION_SAMPLES))
 			
@@ -548,7 +547,7 @@ class SurfaceShader(Node):
 			self.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE] = aerialPerspMode
 			if aerialPerspMode != SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE_NONE:
 				if aerialPerspMode == SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE_SKY_COLOR:
-					self.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_SKY_COLOR] = shopNode.evalParm(SurfaceShader.PHYSICAL_AERIAL_PERSP_SKY_COLOR).replace('/', '__')
+					self.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_SKY_COLOR] = shopNode.evalParm(SurfaceShader.PHYSICAL_AERIAL_PERSP_SKY_COLOR)
 			self.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_DISTANCE] = Attr(shopNode.evalParm(SurfaceShader.PHYSICAL_AERIAL_PERSP_DISTANCE))
 			self.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_INTENSITY] = Attr(shopNode.evalParm(SurfaceShader.PHYSICAL_AERIAL_PERSP_INTENSITY))
 
@@ -695,9 +694,9 @@ class ObjectInstance(Assembly):
 
 	def Resolve(self, sohoObject, moments):
 		sopPath = sohoObject.getDefaultedString('object:soppath', sohoObject, [''])[0]
-		name = sopPath.replace('/', '__')
+		name = sopPath
 		self.attrs[ObjectInstance.NAME] = name
-		self.attrs[ObjectInstance.OBJECT] = name + '.' + name
+		self.attrs[ObjectInstance.OBJECT] = name.replace('/', '__') + '.' + name.replace('/', '__')
 
 		sohoObject.evalFloat('space:world', moments[0], self.transform.matrix.data)
 		self.transform.matrix.data = hou.Matrix4(self.transform.matrix.data).transposed().asTuple()
@@ -1393,8 +1392,7 @@ if __name__ == '__builtin__':
 	# TODO: Not use wrangler now
 	#
 	for sohoLight in soho.objectList('objlist:light'):
-		sohoLightPath = sohoLight.getDefaultedString('object:name', sohoLight, [''])[0]
-		sohoLightName = sohoLightPath.replace('/', '__')
+		sohoLightName = sohoLight.getDefaultedString('object:name', sohoLight, [''])[0]
 		if not theProject.scene.assembly.lights.has_key(sohoLightName):
 			light = Light()
 			light.Resolve(sohoLight, moments)
@@ -1416,7 +1414,7 @@ if __name__ == '__builtin__':
 		objectSopNode = hou.node(sohoObjectInstance.getName())
 
 		materialNodePath = objectSopNode.evalParm('shop_materialpath')
-		materialNodeName = materialNodePath.replace('/', '__')
+		materialNodeName = materialNodePath
 		ProcessMaterial(materialNodeName, theProject, moments)
 		
 		if not theProject.scene.assembly.objectInstances.has_key(objectName):
