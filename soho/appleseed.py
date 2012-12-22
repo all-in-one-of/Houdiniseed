@@ -45,6 +45,51 @@ def ProcessColor(colorNodeName, project, moments):
 		color.Resolve(colorNode, moments)
 		project.scene.assembly.colors[colorNodeName] = color
 
+def ProcessBSDF(bsdfName, project, moments):
+	if not project.scene.assembly.bsdfs.has_key(bsdfName):
+		bsdfShopNodePath = bsdfName
+		bsdfShopNode = hou.node(bsdfShopNodePath)
+		bsdf = BSDF()
+		bsdf.Resolve(bsdfShopNode, moments)
+		project.scene.assembly.bsdfs[bsdfName] = bsdf
+		
+		bsdfModel = bsdf.attrs[BSDF.MODEL]
+		if bsdfModel == BSDF.ASHIKHMIN_BRDF:
+			diffuseNodeName = bsdf.attrs[BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE]
+			ProcessColor(diffuseNodeName, project, moments)
+			glossyNodeName = bsdf.attrs[BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE]
+			ProcessColor(glossyNodeName, project, moments)
+
+		elif bsdfModel == BSDF.KELEMEN_BRDF:
+			matteNodeName = bsdf.attrs[BSDF.KELEMEN_MATTE_REFLECTANCE]
+			ProcessColor(matteNodeName, project, moments)
+			specularNodeName = bsdf.attrs[BSDF.KELEMEN_SPECULAR_REFLECTANCE]
+			ProcessColor(specularNodeName, project, moments)
+
+		elif bsdfModel == BSDF.BSDF_MIX:
+			bsdfName0 = bsdf.attrs[BSDF.BSDF_MIX_BSDF0]
+			if not project.scene.assembly.bsdfs.has_key(bsdfName0):
+				ProcessBSDF(bsdfName0, project, moments)
+
+			bsdfName1 = bsdf.attrs[BSDF.BSDF_MIX_BSDF1]
+			if not project.scene.assembly.bsdfs.has_key(bsdfName1):
+				ProcessBSDF(bsdfName1, project, moments)
+
+		elif bsdfModel == BSDF.LAMBERTIAN_BRDF:
+			reflectanceNodeName = bsdf.attrs[BSDF.LAMBERTIAN_REFLECTANCE]
+			ProcessColor(reflectanceNodeName, project, moments)
+
+		elif bsdfModel == BSDF.SPECULAR_BRDF:
+			reflectanceNodeName = bsdf.attrs[BSDF.SPECULAR_BRDF_REFLECTANCE]
+			ProcessColor(reflectanceNodeName, project, moments)
+
+		elif bsdfModel == BSDF.SPECULAR_BTDF:
+			reflectanceNodeName = bsdf.attrs[BSDF.SPECULAR_BTDF_REFLECTANCE]
+			ProcessColor(reflectanceNodeName, project, moments)
+
+			transmittanceNodeName = bsdf.attrs[BSDF.SPECULAR_BTDF_TRANSMITTANCE]
+			ProcessColor(transmittanceNodeName, project, moments)	
+
 def ProcessMaterial(materialNodeName, project, moments):
 	materialNodePath = materialNodeName
 	materialNode = hou.node(materialNodePath)
@@ -58,38 +103,7 @@ def ProcessMaterial(materialNodeName, project, moments):
 
 		if material.attrs.has_key(Material.BSDF):
 			bsdfName = material.attrs[Material.BSDF]
-			if not project.scene.assembly.bsdfs.has_key(bsdfName):
-				bsdfShopNodePath = bsdfName
-				bsdfShopNode = hou.node(bsdfShopNodePath)
-				bsdf = BSDF()
-				bsdf.Resolve(bsdfShopNode, moments)
-				project.scene.assembly.bsdfs[bsdfName] = bsdf
-				
-				bsdfModel = bsdf.attrs[BSDF.MODEL]
-				if bsdfModel == BSDF.ASHIKHMIN_BRDF:
-					diffuseNodeName = bsdf.attrs[BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE]
-					ProcessColor(diffuseNodeName, project, moments)
-					glossyNodeName = bsdf.attrs[BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE]
-					ProcessColor(glossyNodeName, project, moments)
-				elif bsdfModel == BSDF.KELEMEN_BRDF:
-					matteNodeName = bsdf.attrs[BSDF.KELEMEN_MATTE_REFLECTANCE]
-					ProcessColor(matteNodeName, project, moments)
-					specularNodeName = bsdf.attrs[BSDF.KELEMEN_SPECULAR_REFLECTANCE]
-					ProcessColor(specularNodeName, project, moments)
-				elif bsdfModel == BSDF.BSDF_MIX:
-					pass						
-				elif bsdfModel == BSDF.LAMBERTIAN_BRDF:
-					reflectanceNodeName = bsdf.attrs[BSDF.LAMBERTIAN_REFLECTANCE]
-					ProcessColor(reflectanceNodeName, project, moments)
-				elif bsdfModel == BSDF.SPECULAR_BRDF:
-					reflectanceNodeName = bsdf.attrs[BSDF.SPECULAR_BRDF_REFLECTANCE]
-					ProcessColor(reflectanceNodeName, project, moments)
-				elif bsdfModel == BSDF.SPECULAR_BTDF:
-					reflectanceNodeName = bsdf.attrs[BSDF.SPECULAR_BTDF_REFLECTANCE]
-					ProcessColor(reflectanceNodeName, project, moments)
-
-					transmittanceNodeName = bsdf.attrs[BSDF.SPECULAR_BTDF_TRANSMITTANCE]
-					ProcessColor(transmittanceNodeName, project, moments)
+			ProcessBSDF(bsdfName, project, moments)
 
 		if material.attrs.has_key(Material.EDF):
 			edfName = material.attrs[Material.EDF]
@@ -1008,19 +1022,19 @@ class XmlSerializer(object):
 				parameterNode.attrib[Attr.VALUE] = str(bsdf.attrs[BSDF.ASHIKHMIN_SHININESS_V].value[0])
 			elif model == BSDF.BSDF_MIX:
 				parameterNode = SubElement(bsdfNode, 'parameter')
-				parameterNode.attrib[Attr.NAME] = BSDF.BSDF_MIX_BSDF0[9]
+				parameterNode.attrib[Attr.NAME] = BSDF.BSDF_MIX_BSDF0[9:]
 				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.BSDF_MIX_BSDF0]
 
 				parameterNode = SubElement(bsdfNode, 'parameter')
-				parameterNode.attrib[Attr.NAME] = BSDF.BSDF_MIX_WEIGHT0[9]
+				parameterNode.attrib[Attr.NAME] = BSDF.BSDF_MIX_WEIGHT0[9:]
 				parameterNode.attrib[Attr.VALUE] = str(bsdf.attrs[BSDF.BSDF_MIX_WEIGHT0].value[0])
 				
 				parameterNode = SubElement(bsdfNode, 'parameter')
-				parameterNode.attrib[Attr.NAME] = BSDF.BSDF_MIX_BSDF1[9]
+				parameterNode.attrib[Attr.NAME] = BSDF.BSDF_MIX_BSDF1[9:]
 				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.BSDF_MIX_BSDF1]
 
 				parameterNode = SubElement(bsdfNode, 'parameter')
-				parameterNode.attrib[Attr.NAME] = BSDF.BSDF_MIX_WEIGHT1[9]
+				parameterNode.attrib[Attr.NAME] = BSDF.BSDF_MIX_WEIGHT1[9:]
 				parameterNode.attrib[Attr.VALUE] = str(bsdf.attrs[BSDF.BSDF_MIX_WEIGHT1].value[0])
 			elif model == BSDF.KELEMEN_BRDF:
 				parameterNode = SubElement(bsdfNode, 'parameter')
