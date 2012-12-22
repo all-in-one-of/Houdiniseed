@@ -29,6 +29,75 @@ import sohog
 
 from xml.etree.ElementTree import Element, ElementTree, SubElement, tostring
 
+##
+# Global variables.
+#
+theProject = None
+
+##
+# Global functions.
+#
+def AddColor(colorNodeName, project, moments):
+	if not project.scene.assembly.colors.has_key(colorNodeName):
+		colorNodePath = colorNodeName.replace('__', '/')
+		colorNode = hou.node(colorNodePath)
+		color = Color()
+		color.Resolve(colorNode, moments)
+		project.scene.assembly.colors[colorNodeName] = color
+
+
+def AddMaterial(materialNodeName, project, moments):
+	materialNodePath = materialNodeName.replace('__', '/')
+	materialNode = hou.node(materialNodePath)
+	if materialNode.type().name() != 'appleseedMaterial':
+			soho.error('%s Must be appleseedMaterial.' % materialNode.path())
+
+	if not project.scene.assembly.materials.has_key(materialNodeName):
+		material = Material()
+		material.Resolve(materialNode, moments)
+		project.scene.assembly.materials[materialNodeName] = material
+
+		bsdfName = material.attrs[Material.BSDF]
+		if not project.scene.assembly.bsdfs.has_key(bsdfName):
+			bsdfShopNodePath = bsdfName.replace('__', '/')
+			bsdfShopNode = hou.node(bsdfShopNodePath)
+			bsdf = BSDF()
+			bsdf.Resolve(bsdfShopNode, moments)
+			project.scene.assembly.bsdfs[bsdfName] = bsdf
+			
+			bsdfModel = bsdf.attrs[BSDF.MODEL]
+			if bsdfModel == BSDF.ASHIKHMIN_BRDF:
+				diffuseNodeName = bsdf.attrs[BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE]
+				AddColor(diffuseNodeName, project, moments)
+				glossyNodeName = bsdf.attrs[BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE]
+				AddColor(glossyNodeName, project, moments)
+			if bsdfModel == BSDF.KELEMEN_BRDF:
+				matteNodeName = bsdf.attrs[BSDF.KELEMEN_MATTE_REFLECTANCE]
+				AddColor(matteNodeName, project, moments)
+				specularNodeName = bsdf.attrs[BSDF.KELEMEN_SPECULAR_REFLECTANCE]
+				AddColor(specularNodeName, project, moments)
+
+			surfaceShaderName = material.attrs[Material.SURFACE_SHADER]
+			if not project.scene.assembly.surfaceShaders.has_key(surfaceShaderName):
+				surfaceShaderShopNodePath = surfaceShaderName.replace('__', '/')
+				surfaceShaderShopNode = hou.node(surfaceShaderShopNodePath)
+				surfaceShader = SurfaceShader()
+				surfaceShader.Resolve(surfaceShaderShopNode, moments)
+				project.scene.assembly.surfaceShaders[surfaceShaderName] = surfaceShader
+
+				# Collect color from surface shader.
+				model = surfaceShader.attrs[SurfaceShader.MODEL]
+				if model == SurfaceShader.CONSTANT_SURFACE_SHADER:
+					colorNodeName = surfaceShader.attrs[SurfaceShader.CONSTANT_COLOR].value
+					AddColor(colorNodeName, project, moments)
+				elif model == SurfaceShader.FAST_SSS_SURFACE_SHADER:
+					albedoNodeName = surfaceShader.attrs[SurfaceShader.FAST_SSS_ALBEDO].value
+					AddColor(albedoNodeName, project, moments)
+				elif model == SurfaceShader.PHYSICAL_SURFACE_SHADER:
+					if surfaceShader.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE] == SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE_SKY_COLOR:
+						skyColorNodeName = surfaceShader.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_SKY_COLOR].value
+						AddColor(skyColorNodeName, project, moments)
+
 
 ##
 #
@@ -120,10 +189,28 @@ class BSDF(Assembly):
 	ASHIKHMIN_SHININESS_U = 'ashikhmin_shininess_u'
 	ASHIKHMIN_SHININESS_V = 'ashikhmin_shininess_v'
 
+	BSDF_MIX = 'bsdf_mix'
+	BSDF_MIX_BSDF0 = 'bsdf_mix_bsdf0'
+	BSDF_MIX_WEIGHT0 = 'mix_weight0'
+	BSDF_MIX_BSDF1 = 'bsdf_mix_bsdf1'
+	BSDF_MIX_WEIGHT1 = 'mix_weight1'
+
 	KELEMEN_BRDF = 'kelemen_brdf'
 	KELEMEN_MATTE_REFLECTANCE = 'kelemen_matte_reflectance'
 	KELEMEN_SPECULAR_REFLECTANCE = 'kelemen_specular_reflectance'
 	KELEMEN_ROUGHNESS = 'kelemen_roughness'
+
+	LAMBERTIAN_BRDF = 'lambertian_brdf'
+	LAMBERTIAN_REFLECTANCE = 'lambertian_reflectance'
+
+	SPECULAR_BRDF = 'specular_brdf'
+	SPECULAR_BRDF_REFLECTANCE = 'specular_brdf_reflectance'
+
+	SPECULAR_BTDF = 'specular_btdf'
+	SPECULAR_BTDF_REFLECTANCE = 'specular_btdf_reflectance'
+	SPECULAR_BTDF_TRANSMITTANCE = 'specular_btdf_transmittance'
+	SPECULAR_BTDF_FROM_IOR = 'specular_btdf_from_ior'
+	SPECULAR_BTDF_TO_IOR = 'specular_btdf_to_ior'
 
 	def __init__(self):
 		super(BSDF, self).__init__()
@@ -138,11 +225,33 @@ class BSDF(Assembly):
 			self.attrs[BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE] = shopNode.evalParm(BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE).replace('/', '__')
 			self.attrs[BSDF.ASHIKHMIN_SHININESS_U] = Attr(shopNode.evalParm(BSDF.ASHIKHMIN_SHININESS_U))
 			self.attrs[BSDF.ASHIKHMIN_SHININESS_V] = Attr(shopNode.evalParm(BSDF.ASHIKHMIN_SHININESS_V))
+		if model == BSDF.BSDF_MIX:
+			self.attrs[BSDF.BSDF_MIX_BSDF0] = shopNode.evalParm(BSDF.BSDF_MIX_BSDF0)
+			self.attrs[BSDF.BSDF_MIX_WEIGHT0] = shopNode.evalParm(BSDF.BSDF_MIX_WEIGHT0)
+
+			self.attrs[BSDF.BSDF_MIX_BSDF1] = shopNode.evalParm(BSDF.BSDF_MIX_BSDF1)
+			self.attrs[BSDF.BSDF_MIX_WEIGHT1] = shopNode.evalParm(BSDF.BSDF_MIX_WEIGHT1)
 		elif model == BSDF.KELEMEN_BRDF:
 			self.attrs[BSDF.KELEMEN_MATTE_REFLECTANCE] = shopNode.evalParm(BSDF.KELEMEN_MATTE_REFLECTANCE).replace('/', '__')
 			self.attrs[BSDF.KELEMEN_SPECULAR_REFLECTANCE] = shopNode.evalParm(BSDF.KELEMEN_SPECULAR_REFLECTANCE).replace('/', '__')
 			self.attrs[BSDF.KELEMEN_ROUGHNESS] = Attr(shopNode.evalParm(BSDF.KELEMEN_ROUGHNESS))
-
+		elif model == BSDF.LAMBERTIAN_BRDF:
+			reflectanceElementName = shopNode.evalParm(BSDF.LAMBERTIAN_REFLECTANCE).replace('/', '__')
+			AddColor(reflectanceElementName, theProject, moments)
+			self.attrs[BSDF.LAMBERTIAN_REFLECTANCE] = reflectanceElementName
+		elif model == BSDF.SPECULAR_BRDF:
+			reflectanceElementName = shopNode.evalParm(BSDF.SPECULAR_BRDF_REFLECTANCE).replace('/', '__')
+			AddColor(reflectanceElementName, theProject, moments)
+			self.attrs[BSDF.SPECULAR_BRDF_REFLECTANCE] = reflectanceElementName
+		elif model == BSDF.SPECULAR_BTDF:
+			reflectanceElementName = shopNode.evalParm(BSDF.SPECULAR_BTDF_REFLECTANCE).replace('/', '__')
+			AddColor(reflectanceElementName, theProject, moments)
+			self.attrs[BSDF.SPECULAR_BTDF_REFLECTANCE] = reflectanceElementName
+			reflectanceElementName = shopNode.evalParm(BSDF.SPECULAR_BTDF_TRANSMITTANCE).replace('/', '__')
+			AddColor(reflectanceElementName, theProject, moments)
+			self.attrs[BSDF.SPECULAR_BTDF_TRANSMITTANCE] = reflectanceElementName
+			self.attrs[BSDF.SPECULAR_BTDF_FROM_IOR] = shopNode.evalParm(BSDF.SPECULAR_BTDF_FROM_IOR)
+			self.attrs[BSDF.SPECULAR_BTDF_TO_IOR] = shopNode.evalParm(BSDF.SPECULAR_BTDF_TO_IOR)
 
 ##
 #
@@ -843,6 +952,22 @@ class XmlSerializer(object):
 				parameterNode = SubElement(bsdfNode, 'parameter')
 				parameterNode.attrib[Attr.NAME] = BSDF.ASHIKHMIN_SHININESS_V[10:]
 				parameterNode.attrib[Attr.VALUE] = str(bsdf.attrs[BSDF.ASHIKHMIN_SHININESS_V].value[0])
+			elif model == BSDF.BSDF_MIX:
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.BSDF_MIX_BSDF0[9]
+				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.BSDF_MIX_BSDF0]
+
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.BSDF_MIX_WEIGHT0[9]
+				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.BSDF_MIX_WEIGHT0]
+				
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.BSDF_MIX_BSDF1[9]
+				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.BSDF_MIX_BSDF1]
+
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.BSDF_MIX_WEIGHT1[9]
+				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.BSDF_MIX_WEIGHT1]
 			elif model == BSDF.KELEMEN_BRDF:
 				parameterNode = SubElement(bsdfNode, 'parameter')
 				parameterNode.attrib[Attr.NAME] = BSDF.KELEMEN_MATTE_REFLECTANCE[8:]
@@ -855,6 +980,31 @@ class XmlSerializer(object):
 				parameterNode = SubElement(bsdfNode, 'parameter')
 				parameterNode.attrib[Attr.NAME] = BSDF.KELEMEN_ROUGHNESS[8:]
 				parameterNode.attrib[Attr.VALUE] = str(bsdf.attrs[BSDF.KELEMEN_ROUGHNESS].value[0])
+			elif model == BSDF.LAMBERTIAN_BRDF:
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.LAMBERTIAN_REFLECTANCE[11:]
+				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.LAMBERTIAN_REFLECTANCE]
+			elif model == BSDF.SPECULAR_BRDF:
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.SPECULAR_BRDF_REFLECTANCE[14:]
+				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.SPECULAR_BRDF_REFLECTANCE]
+			elif model == BSDF.SPECULAR_BTDF:
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.SPECULAR_BTDF_REFLECTANCE[14:]
+				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.SPECULAR_BTDF_REFLECTANCE]
+
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.SPECULAR_BTDF_TRANSMITTANCE[14:]
+				parameterNode.attrib[Attr.VALUE] = bsdf.attrs[BSDF.SPECULAR_BTDF_TRANSMITTANCE]
+
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.SPECULAR_BTDF_FROM_IOR[14:]
+				parameterNode.attrib[Attr.VALUE] = str(bsdf.attrs[BSDF.SPECULAR_BTDF_FROM_IOR])
+				
+				parameterNode = SubElement(bsdfNode, 'parameter')
+				parameterNode.attrib[Attr.NAME] = BSDF.SPECULAR_BTDF_TO_IOR[14:]
+				parameterNode.attrib[Attr.VALUE] = str(bsdf.attrs[BSDF.SPECULAR_BTDF_TO_IOR])
+
 
 		## Serialize project:scene:assembly:color
 		#
@@ -1152,67 +1302,7 @@ class XmlSerializer(object):
 		ElementTree(projectNode).write(sys.stdout, encoding = 'UTF-8')
 
 
-##
-#
-def AddColor(colorNodeName, project, moments):
-	if not project.scene.assembly.colors.has_key(colorNodeName):
-		colorNodePath = colorNodeName.replace('__', '/')
-		colorNode = hou.node(colorNodePath)
-		color = Color()
-		color.Resolve(colorNode, moments)
-		project.scene.assembly.colors[colorNodeName] = color
 
-def AddMaterial(materialNodeName, project, moments):
-	materialNodePath = materialNodeName.replace('__', '/')
-	materialNode = hou.node(materialNodePath)
-	if materialNode.type().name() != 'appleseedMaterial':
-			soho.error('%s Must be appleseedMaterial.' % materialNode.path())
-
-	if not project.scene.assembly.materials.has_key(materialNodeName):
-		material = Material()
-		material.Resolve(materialNode, moments)
-		project.scene.assembly.materials[materialNodeName] = material
-
-		bsdfName = material.attrs[Material.BSDF]
-		if not project.scene.assembly.bsdfs.has_key(bsdfName):
-			bsdfShopNodePath = bsdfName.replace('__', '/')
-			bsdfShopNode = hou.node(bsdfShopNodePath)
-			bsdf = BSDF()
-			bsdf.Resolve(bsdfShopNode, moments)
-			project.scene.assembly.bsdfs[bsdfName] = bsdf
-			
-			bsdfModel = bsdf.attrs[BSDF.MODEL]
-			if bsdfModel == BSDF.ASHIKHMIN_BRDF:
-				diffuseNodeName = bsdf.attrs[BSDF.ASHIKHMIN_DIFFUSE_REFLECTANCE]
-				AddColor(diffuseNodeName, project, moments)
-				glossyNodeName = bsdf.attrs[BSDF.ASHIKHMIN_GLOSSY_REFLECTANCE]
-				AddColor(glossyNodeName, project, moments)
-			if bsdfModel == BSDF.KELEMEN_BRDF:
-				matteNodeName = bsdf.attrs[BSDF.KELEMEN_MATTE_REFLECTANCE]
-				AddColor(matteNodeName, project, moments)
-				specularNodeName = bsdf.attrs[BSDF.KELEMEN_SPECULAR_REFLECTANCE]
-				AddColor(specularNodeName, project, moments)
-
-			surfaceShaderName = material.attrs[Material.SURFACE_SHADER]
-			if not project.scene.assembly.surfaceShaders.has_key(surfaceShaderName):
-				surfaceShaderShopNodePath = surfaceShaderName.replace('__', '/')
-				surfaceShaderShopNode = hou.node(surfaceShaderShopNodePath)
-				surfaceShader = SurfaceShader()
-				surfaceShader.Resolve(surfaceShaderShopNode, moments)
-				project.scene.assembly.surfaceShaders[surfaceShaderName] = surfaceShader
-
-				# Collect color from surface shader.
-				model = surfaceShader.attrs[SurfaceShader.MODEL]
-				if model == SurfaceShader.CONSTANT_SURFACE_SHADER:
-					colorNodeName = surfaceShader.attrs[SurfaceShader.CONSTANT_COLOR].value
-					AddColor(colorNodeName, project, moments)
-				elif model == SurfaceShader.FAST_SSS_SURFACE_SHADER:
-					albedoNodeName = surfaceShader.attrs[SurfaceShader.FAST_SSS_ALBEDO].value
-					AddColor(albedoNodeName, project, moments)
-				elif model == SurfaceShader.PHYSICAL_SURFACE_SHADER:
-					if surfaceShader.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE] == SurfaceShader.PHYSICAL_AERIAL_PERSP_MODE_SKY_COLOR:
-						skyColorNodeName = surfaceShader.attrs[SurfaceShader.PHYSICAL_AERIAL_PERSP_SKY_COLOR].value
-						AddColor(skyColorNodeName, project, moments)
 
 if __name__ == '__builtin__':
 
@@ -1229,12 +1319,12 @@ if __name__ == '__builtin__':
 
 	soho.lockObjects(moments[0])
 
-	project = Project()
+	theProject = Project()
 
 	for sohoCamera in soho.objectList('objlist:camera'):
 		camera = Camera()
 		camera.Resolve(sohoCamera, moments)
-		project.scene.camera = camera
+		theProject.scene.camera = camera
 		break
 
 	# Export light.
@@ -1243,14 +1333,14 @@ if __name__ == '__builtin__':
 	for sohoLight in soho.objectList('objlist:light'):
 		sohoLightPath = sohoLight.getDefaultedString('object:name', sohoLight, [''])[0]
 		sohoLightName = sohoLightPath.replace('/', '__')
-		if not project.scene.assembly.lights.has_key(sohoLightName):
+		if not theProject.scene.assembly.lights.has_key(sohoLightName):
 			light = Light()
 			light.Resolve(sohoLight, moments)
-			project.scene.assembly.lights[sohoLightName] = light
+			theProject.scene.assembly.lights[sohoLightName] = light
 
 			exitanceName = light.exitance.attrs[Color.NAME]
-			if not project.scene.assembly.colors.has_key(exitanceName):
-				project.scene.assembly.colors[exitanceName] = light.exitance
+			if not theProject.scene.assembly.colors.has_key(exitanceName):
+				theProject.scene.assembly.colors[exitanceName] = light.exitance
 
 	# Export geometry data.
 	#
@@ -1258,27 +1348,28 @@ if __name__ == '__builtin__':
 		object = Object()
 		object.Resolve(sohoObjectInstance, moments)
 		objectName = object.attrs[Object.NAME]
-		if not project.scene.assembly.objects.has_key(objectName):
-			project.scene.assembly.objects[objectName] = object
+		if not theProject.scene.assembly.objects.has_key(objectName):
+			theProject.scene.assembly.objects[objectName] = object
 
 		objectSopNode = hou.node(sohoObjectInstance.getName())
 
 		materialNodePath = objectSopNode.evalParm('shop_materialpath')
 		materialNodeName = materialNodePath.replace('/', '__')
-		AddMaterial(materialNodeName, project, moments)
+		AddMaterial(materialNodeName, theProject, moments)
 		
-		if not project.scene.assembly.objectInstances.has_key(objectName):
+		if not theProject.scene.assembly.objectInstances.has_key(objectName):
 			objectInstance = ObjectInstance()
 			objectInstance.Resolve(sohoObjectInstance, moments)
 			objectInstance.assignMaterial.attrs[AssignMaterial.MATERIAL] = materialNodeName
-			project.scene.assembly.objectInstances[objectName] = objectInstance
-
+			theProject.scene.assembly.objectInstances[objectName] = objectInstance
 
 	frame = Frame()
 	frame.Resolve(None, moments)
-	project.output.frames[frame.attrs[Frame.NAME]] = frame
+	theProject.output.frames[frame.attrs[Frame.NAME]] = frame
 
-	project.configurations.Resolve(None, moments)
+	theProject.configurations.Resolve(None, moments)
 
 	serializer = XmlSerializer()
-	serializer.Serialize(project)
+	serializer.Serialize(theProject)
+	
+	theProject = None
